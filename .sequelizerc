@@ -1,0 +1,27 @@
+const path = require('path');
+const fs = require('fs');
+
+const getModelsPath = (baseDir) => {
+  const modulesDir = path.resolve(baseDir);
+  const modelPaths = [];
+
+  fs.readdirSync(modulesDir).forEach((module) => {
+    const repoDir = path.join(modulesDir, module, 'repo');
+    if (fs.existsSync(repoDir)) {
+      fs.readdirSync(repoDir).forEach((file) => {
+        if (file.endsWith('.model.ts')) {
+          modelPaths.push(path.join(repoDir, file));
+        }
+      });
+    }
+  });
+
+  return modelPaths;
+};
+
+module.exports = {
+  'config': path.resolve('src','database', 'sequelize-cli', 'migrations-config.js'),
+  'migrations-path': path.resolve('src','database', 'sequelize-cli', 'migrations'),
+  'seeders-path': path.resolve('src','database', 'sequelize-cli', 'seeders'),
+  'models-path': getModelsPath('src','modules'),
+};
