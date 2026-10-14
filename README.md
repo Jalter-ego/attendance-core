@@ -31,35 +31,17 @@ Es **multi-tenant** (SaaS): cada institución es un *tenant* con sus propios adm
 ## Instalación y configuración
 
 1. **Instalar dependencias:**
+
    ```bash
    pnpm install
    ```
-
 2. **Variables de entorno.** Copia el archivo de ejemplo y ajusta los valores:
+
    ```bash
    cp .env.example .env
    ```
+3. **Crear las tablas y cargar los datos de prueba:**
 
-   | Variable | Descripción |
-   |---|---|
-   | `PORT` | Puerto del servidor (por defecto `5000`) |
-   | `CORS_ORIGIN` | Origen permitido para el frontend (`*` en desarrollo) |
-   | `DB_SSL` | `false` para un Postgres local. Si se omite, la conexión usa SSL |
-   | `DB_READ_*` / `DB_WRITE_*` | Conexión de lectura y de escritura. Con un solo Postgres, ambos llevan los mismos valores |
-   | `JWT_SECRET` | Clave para firmar los tokens. Usa un valor largo y aleatorio |
-   | `JWT_EXPIRES_IN` | Duración de la sesión, por ejemplo `8h` |
-
-   Para generar un `JWT_SECRET`:
-   ```bash
-   node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
-   ```
-
-3. **Crear la base de datos** en Postgres, por ejemplo `attendance_db`, con pgAdmin o con:
-   ```sql
-   CREATE DATABASE attendance_db;
-   ```
-
-4. **Crear las tablas y cargar los datos de prueba:**
    ```bash
    pnpm db:migrate
    pnpm db:seed
@@ -79,11 +61,10 @@ pnpm start:prod
 ```
 
 El servidor queda disponible en:
+
 ```
 http://localhost:5000/core/api/v1
 ```
-
-> Si cambias `tsconfig.json`, reinicia `start:dev`: el modo *watch* no relee ese archivo.
 
 ---
 
@@ -91,15 +72,17 @@ http://localhost:5000/core/api/v1
 
 ### Roles
 
-| Rol | Cómo ingresa | Qué puede hacer |
-|---|---|---|
-| **Administrador** | Institución + correo + contraseña | Crea e importa módulos, consulta y corrige asistencias, revisa el historial de actividades |
-| **Estudiante** | Institución + correo **o** número de registro | Marca su asistencia el día de clase y consulta su historial |
+| Rol                     | Cómo ingresa                                         | Qué puede hacer                                                                            |
+| ----------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| **Administrador** | Institución + correo + contraseña                   | Crea e importa módulos, consulta y corrige asistencias, revisa el historial de actividades |
+| **Estudiante**    | Institución + correo **o** número de registro | Marca su asistencia el día de clase y consulta su historial                                |
 
 Al iniciar sesión se recibe un **JWT** que se envía en cada petición:
+
 ```
 Authorization: Bearer <accessToken>
 ```
+
 El token indica quién es el usuario, su institución (`tenantId`) y, en el caso del estudiante, su módulo. Todas las consultas se filtran por esa institución, así que un tenant nunca ve los datos de otro.
 
 Todas las rutas exigen token, salvo los logins. Cada ruta además está restringida a un rol: si un estudiante llama a una ruta de admin, o al revés, recibe `403`.
@@ -125,12 +108,12 @@ draft (borrador) ──activar──▶ active (activo) ──al activar otro─
 
 Cada fecha se muestra con uno de estos estados:
 
-| Estado | Significado |
-|---|---|
-| `present` | Presente |
-| `absent` | Falta: la fecha pasó sin marca, o el admin la registró así |
-| `pending` | La clase es hoy y el estudiante todavía puede marcar |
-| `upcoming` | La fecha aún no llega |
+| Estado       | Significado                                                   |
+| ------------ | ------------------------------------------------------------- |
+| `present`  | Presente                                                      |
+| `absent`   | Falta: la fecha pasó sin marca, o el admin la registró así |
+| `pending`  | La clase es hoy y el estudiante todavía puede marcar         |
+| `upcoming` | La fecha aún no llega                                        |
 
 - El admin puede cambiar Presente/Falta en **cualquier fecha** del módulo activo, incluso en fechas pasadas.
 - `markedAt` es la hora real en que marcó el estudiante. Una corrección del admin no la inventa.
@@ -139,13 +122,13 @@ Cada fecha se muestra con uno de estos estados:
 
 Se registran en `activity_logs` el usuario, la acción, la fecha y hora, la IP, el registro afectado y, en las correcciones, el valor anterior y el nuevo:
 
-| Acción | Cuándo |
-|---|---|
-| `LOGIN` / `LOGOUT` | Ingreso y salida de admins y estudiantes |
-| `STUDENTS_IMPORTED` / `SESSIONS_IMPORTED` | Importación de un Excel |
-| `MODULE_ACTIVATED` | Activación de un módulo |
-| `ATTENDANCE_MARKED` | El estudiante marcó su asistencia |
-| `ATTENDANCE_UPDATED` | El admin corrigió una asistencia |
+| Acción                                       | Cuándo                                  |
+| --------------------------------------------- | ---------------------------------------- |
+| `LOGIN` / `LOGOUT`                        | Ingreso y salida de admins y estudiantes |
+| `STUDENTS_IMPORTED` / `SESSIONS_IMPORTED` | Importación de un Excel                 |
+| `MODULE_ACTIVATED`                          | Activación de un módulo                |
+| `ATTENDANCE_MARKED`                         | El estudiante marcó su asistencia       |
+| `ATTENDANCE_UPDATED`                        | El admin corrigió una asistencia        |
 
 ---
 
@@ -171,31 +154,34 @@ Todas las rutas van bajo `http://localhost:5000/core/api/v1`.
   }
   ```
 
-| Código | Significado |
-|---|---|
-| `400` | Datos mal enviados (validación) |
-| `401` | Sin sesión, sesión vencida o credenciales incorrectas |
-| `403` | El rol no tiene permiso para esa ruta |
-| `404` | El recurso no existe o no pertenece al módulo activo |
-| `409` | Conflicto, por ejemplo una asistencia ya marcada o un módulo ya activo |
+| Código | Significado                                                                           |
+| ------- | ------------------------------------------------------------------------------------- |
+| `400` | Datos mal enviados (validación)                                                      |
+| `401` | Sin sesión, sesión vencida o credenciales incorrectas                               |
+| `403` | El rol no tiene permiso para esa ruta                                                 |
+| `404` | El recurso no existe o no pertenece al módulo activo                                 |
+| `409` | Conflicto, por ejemplo una asistencia ya marcada o un módulo ya activo               |
 | `422` | La operación no se puede hacer, por ejemplo un Excel con errores o un día sin clase |
 
 ---
 
 ### Autenticación
 
-| Método | Ruta | Acceso | Descripción |
-|---|---|---|---|
-| POST | `/auth/admin/login` | Público | Login del administrador |
-| POST | `/auth/student/login` | Público | Login del estudiante |
-| GET | `/auth/me` | Admin y estudiante | Datos del usuario de la sesión |
-| POST | `/auth/logout` | Admin y estudiante | Registra la salida. Responde `204` |
+| Método | Ruta                    | Acceso             | Descripción                         |
+| ------- | ----------------------- | ------------------ | ------------------------------------ |
+| POST    | `/auth/admin/login`   | Público           | Login del administrador              |
+| POST    | `/auth/student/login` | Público           | Login del estudiante                 |
+| GET     | `/auth/me`            | Admin y estudiante | Datos del usuario de la sesión      |
+| POST    | `/auth/logout`        | Admin y estudiante | Registra la salida. Responde `204` |
 
 **POST `/auth/admin/login`**
+
 ```json
 { "tenant": "demo", "email": "admin@demo.com", "password": "Admin123!" }
 ```
+
 Respuesta `200`:
+
 ```json
 {
   "accessToken": "eyJhbGciOi...",
@@ -205,10 +191,13 @@ Respuesta `200`:
 ```
 
 **POST `/auth/student/login`**. `identifier` acepta el correo o el número de registro:
+
 ```json
 { "tenant": "demo", "identifier": "1001" }
 ```
+
 Respuesta `200`:
+
 ```json
 {
   "accessToken": "eyJhbGciOi...",
@@ -217,6 +206,7 @@ Respuesta `200`:
   "tenant": { "id": "…", "name": "Institución Demo", "slug": "demo" }
 }
 ```
+
 Si el estudiante no está en el módulo activo, responde `401` con "Los datos no corresponden a un estudiante del módulo activo".
 
 > El JWT no se puede invalidar en el servidor. Al cerrar sesión, el frontend debe borrar el token.
@@ -225,32 +215,37 @@ Si el estudiante no está en el módulo activo, responde `401` con "Los datos no
 
 ### Módulos académicos (admin)
 
-| Método | Ruta | Descripción |
-|---|---|---|
-| POST | `/modules` | Crea un módulo en borrador |
-| GET | `/modules` | Lista el borrador y el módulo activo, con sus cantidades |
-| GET | `/modules/active` | Módulo activo |
-| GET | `/modules/:id` | Vista previa con estudiantes y fechas |
-| POST | `/modules/:moduleId/students/import` | Importa estudiantes desde Excel |
-| POST | `/modules/:moduleId/sessions/import` | Importa fechas de clase desde Excel |
-| POST | `/modules/:id/activate` | Activa el módulo y archiva el anterior |
+| Método | Ruta                                   | Descripción                                              |
+| ------- | -------------------------------------- | --------------------------------------------------------- |
+| POST    | `/modules`                           | Crea un módulo en borrador                               |
+| GET     | `/modules`                           | Lista el borrador y el módulo activo, con sus cantidades |
+| GET     | `/modules/active`                    | Módulo activo                                            |
+| GET     | `/modules/:id`                       | Vista previa con estudiantes y fechas                     |
+| POST    | `/modules/:moduleId/students/import` | Importa estudiantes desde Excel                           |
+| POST    | `/modules/:moduleId/sessions/import` | Importa fechas de clase desde Excel                       |
+| POST    | `/modules/:id/activate`              | Activa el módulo y archiva el anterior                   |
 
 **POST `/modules`**
+
 ```json
 { "name": "Módulo 3 - Backend" }
 ```
+
 Respuesta `201`:
+
 ```json
 { "id": "…", "name": "Módulo 3 - Backend", "status": "draft", "activatedAt": null, "createdAt": "…", "studentsCount": 0, "sessionsCount": 0 }
 ```
 
 **POST `/modules/:moduleId/students/import`** y **`/sessions/import`**
+
 - Body de tipo `multipart/form-data`, con el campo **`file`** y un archivo `.xlsx` de hasta 5 MB.
 - Respuesta `201`: `{ "imported": 5 }`.
 - Si hay errores, responde `422` con la lista y **no guarda nada**.
 - Solo funciona con módulos en borrador. Sobre el módulo activo responde `409`.
 
 **GET `/modules/:id`**. Respuesta `200`:
+
 ```json
 {
   "id": "…", "name": "Módulo 3 - Backend", "status": "draft", "studentsCount": 5, "sessionsCount": 6,
@@ -260,9 +255,11 @@ Respuesta `201`:
 ```
 
 **POST `/modules/:id/activate`**. La confirmación es obligatoria:
+
 ```json
 { "confirm": true }
 ```
+
 - Respuesta `200`: el módulo activado y `archivedModule`, el que se archivó.
 - Responde `422` si el módulo no tiene estudiantes o fechas, y `409` si ya está activo.
 
@@ -270,13 +267,14 @@ Respuesta `201`:
 
 ### Asistencia del estudiante
 
-| Método | Ruta | Descripción |
-|---|---|---|
-| GET | `/attendance/today` | Si hoy hay clase y si ya marcó, para habilitar el botón |
-| POST | `/attendance/mark` | Marca la asistencia de hoy |
-| GET | `/attendance/me` | Historial con el estado de cada fecha y un resumen |
+| Método | Ruta                  | Descripción                                              |
+| ------- | --------------------- | --------------------------------------------------------- |
+| GET     | `/attendance/today` | Si hoy hay clase y si ya marcó, para habilitar el botón |
+| POST    | `/attendance/mark`  | Marca la asistencia de hoy                                |
+| GET     | `/attendance/me`    | Historial con el estado de cada fecha y un resumen        |
 
 **GET `/attendance/today`**. Respuesta `200`:
+
 ```json
 {
   "date": "2026-10-13",
@@ -287,10 +285,12 @@ Respuesta `201`:
 ```
 
 **POST `/attendance/mark`**. No lleva body.
+
 - Respuesta `201`: `{ "id": "…", "status": "present", "markedAt": "2026-10-14T01:50:01.666Z", "session": { … } }`.
 - Responde `409` si ya hay una asistencia para hoy, y `422` si hoy no hay clase.
 
 **GET `/attendance/me`**. Respuesta `200`:
+
 ```json
 {
   "module": { "id": "…", "name": "Módulo de prueba" },
@@ -310,18 +310,20 @@ Respuesta `201`:
 
 ### Administración de estudiantes y asistencias (admin)
 
-| Método | Ruta | Descripción |
-|---|---|---|
-| GET | `/students?search=` | Estudiantes del módulo activo |
-| GET | `/attendances?date=&studentId=` | Vista general de asistencias con totales |
-| PUT | `/attendances` | Cambia Presente/Falta de un estudiante en una fecha |
-| GET | `/activity-logs?studentId=&date=&limit=&offset=` | Historial de actividades del módulo activo |
+| Método | Ruta                                               | Descripción                                        |
+| ------- | -------------------------------------------------- | --------------------------------------------------- |
+| GET     | `/students?search=`                              | Estudiantes del módulo activo                      |
+| GET     | `/attendances?date=&studentId=`                  | Vista general de asistencias con totales            |
+| PUT     | `/attendances`                                   | Cambia Presente/Falta de un estudiante en una fecha |
+| GET     | `/activity-logs?studentId=&date=&limit=&offset=` | Historial de actividades del módulo activo         |
 
 **GET `/students`**
+
 - `search` es opcional. Busca por nombre (en cualquier parte, sin importar mayúsculas) o por número de registro (desde el inicio).
 - Respuesta `200`: `{ "module": { … }, "total": 2, "students": [{ "id", "registrationNumber", "fullName", "email" }] }`.
 
 **GET `/attendances`**
+
 - Filtros opcionales y combinables: `date` (`AAAA-MM-DD`) y `studentId`.
 - Respuesta `200`:
   ```json
@@ -341,20 +343,25 @@ Respuesta `201`:
   ```
 
 **PUT `/attendances`**
+
 ```json
 { "studentId": "…", "classSessionId": "…", "status": "present" }
 ```
+
 Respuesta `200`:
+
 ```json
 {
   "changed": true, "previousStatus": "absent", "status": "present",
   "student": { … }, "session": { … }, "markedAt": null
 }
 ```
+
 - Si la fecha ya tiene ese estado, responde `changed: false` y no registra nada.
 - Cada cambio queda auditado en el historial de actividades.
 
 **GET `/activity-logs`**
+
 - `studentId` incluye lo que hizo el estudiante y las correcciones de sus asistencias.
 - `date` (`AAAA-MM-DD`) se interpreta en la zona horaria de la institución.
 - `limit` va de 1 a 200 (por defecto 50) y `offset` por defecto es 0.
@@ -383,14 +390,15 @@ Respuesta `200`:
 
 `pnpm db:seed` crea la institución **`demo`** con:
 
-| Qué | Datos |
-|---|---|
-| Admin | `admin@demo.com` / `Admin123!`. La contraseña se cambia con la variable `SEED_ADMIN_PASSWORD` |
-| Módulo activo | "Módulo de prueba" |
-| Estudiantes | `1001` Juan Pérez (`juan@gmail.com`) y `1002` María López (`maria@gmail.com`) |
-| Fechas de clase | Hace 2 días, **hoy** y dentro de 2 días, de 18:00 a 21:00 |
+| Qué            | Datos                                                                                                |
+| --------------- | ---------------------------------------------------------------------------------------------------- |
+| Admin           | `admin@demo.com` / `Admin123!`. La contraseña se cambia con la variable `SEED_ADMIN_PASSWORD` |
+| Módulo activo  | "Módulo de prueba"                                                                                  |
+| Estudiantes     | `1001` Juan Pérez (`juan@gmail.com`) y `1002` María López (`maria@gmail.com`)             |
+| Fechas de clase | Hace 2 días, **hoy** y dentro de 2 días, de 18:00 a 21:00                                    |
 
 Las fechas se calculan el día en que corres el seeder, así que siempre hay una clase hoy para probar la marca. Para volver al estado inicial:
+
 ```bash
 pnpm db:seed:undo && pnpm db:seed
 ```
@@ -400,12 +408,12 @@ pnpm db:seed:undo && pnpm db:seed
 1. En Postman, pulsa **Import** y elige `docs/postman/attendance-core.postman_collection.json`.
 2. Las requests guardan solas el token y los ids en variables de la colección, así que se ejecutan en orden:
 
-| Carpeta | Requests |
-|---|---|
-| **1. Auth** | *Login admin* guarda `adminToken`. *Login estudiante* guarda `studentToken` |
-| **2. Módulos** | *Crear borrador* guarda `moduleId`. Luego importar estudiantes y fechas, vista previa y activar |
-| **3. Asistencia (estudiante)** | Clase de hoy, marcar asistencia, mi historial |
-| **4. Administración** | *Vista general* guarda un `studentId` y un `classSessionId` para probar *Modificar asistencia* |
+| Carpeta                              | Requests                                                                                               |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| **1. Auth**                    | *Login admin* guarda `adminToken`. *Login estudiante* guarda `studentToken`                    |
+| **2. Módulos**                | *Crear borrador* guarda `moduleId`. Luego importar estudiantes y fechas, vista previa y activar    |
+| **3. Asistencia (estudiante)** | Clase de hoy, marcar asistencia, mi historial                                                          |
+| **4. Administración**         | *Vista general* guarda un `studentId` y un `classSessionId` para probar *Modificar asistencia* |
 
 **Importar Excel en Postman.** En **Body** elige **form-data**, pon la clave `file`, cambia su tipo de *Text* a **File** y selecciona el archivo. La colección apunta a la carpeta `docs/excel-ejemplos/` con una ruta absoluta; si en tu equipo está en otra ubicación, vuelve a seleccionar el archivo.
 
@@ -414,19 +422,6 @@ pnpm db:seed:undo && pnpm db:seed
 ```bash
 BASE=http://localhost:5000/core/api/v1
 
-# Login del admin
-TOKEN=$(curl -s -X POST $BASE/auth/admin/login -H "Content-Type: application/json" \
-  -d '{"tenant":"demo","email":"admin@demo.com","password":"Admin123!"}' | node -pe "JSON.parse(require('fs').readFileSync(0)).accessToken")
-
-# Crear un borrador e importar
-MODULE=$(curl -s -X POST $BASE/modules -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"name":"Módulo 3"}' | node -pe "JSON.parse(require('fs').readFileSync(0)).id")
-curl -X POST $BASE/modules/$MODULE/students/import -H "Authorization: Bearer $TOKEN" -F "file=@docs/excel-ejemplos/estudiantes.xlsx"
-curl -X POST $BASE/modules/$MODULE/sessions/import -H "Authorization: Bearer $TOKEN" -F "file=@docs/excel-ejemplos/fechas.xlsx"
-
-# Activar
-curl -X POST $BASE/modules/$MODULE/activate -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"confirm":true}'
-```
 
 ### Flujo completo sugerido
 
@@ -486,26 +481,26 @@ pnpm sequelize-cli seed:generate --name nombre_del_seeder
 
 ### Tablas
 
-| Tabla | Contenido |
-|---|---|
-| `tenants` | Instituciones, con su `slug` y zona horaria |
-| `users` | Administradores |
-| `modules` | Módulos académicos (`draft`, `active`, `archived`) |
-| `students` | Estudiantes de cada módulo |
-| `class_sessions` | Fechas de clase de cada módulo |
-| `attendances` | Asistencias registradas |
-| `activity_logs` | Historial de acciones. Solo se insertan filas, nunca se modifican |
+| Tabla              | Contenido                                                         |
+| ------------------ | ----------------------------------------------------------------- |
+| `tenants`        | Instituciones, con su `slug` y zona horaria                     |
+| `users`          | Administradores                                                   |
+| `modules`        | Módulos académicos (`draft`, `active`, `archived`)        |
+| `students`       | Estudiantes de cada módulo                                       |
+| `class_sessions` | Fechas de clase de cada módulo                                   |
+| `attendances`    | Asistencias registradas                                           |
+| `activity_logs`  | Historial de acciones. Solo se insertan filas, nunca se modifican |
 
 Las reglas de negocio también están protegidas en la base:
 
-| Regla | Restricción |
-|---|---|
-| Un solo módulo activo por institución (RN-01) | Índice único parcial `modules (tenant_id) WHERE status = 'active'` |
-| Número de registro único en el módulo (RN-02) | `UNIQUE (module_id, registration_number)` |
-| Correo único en el módulo | `UNIQUE (module_id, lower(email))` |
-| Una marca por estudiante y fecha (RN-03) | `UNIQUE (student_id, class_session_id)` |
-| Una fecha de clase por día | `UNIQUE (module_id, class_date)` |
-| No se borra información histórica (RN-08) | Claves foráneas con `ON DELETE RESTRICT` |
+| Regla                                            | Restricción                                                           |
+| ------------------------------------------------ | ---------------------------------------------------------------------- |
+| Un solo módulo activo por institución (RN-01)  | Índice único parcial `modules (tenant_id) WHERE status = 'active'` |
+| Número de registro único en el módulo (RN-02) | `UNIQUE (module_id, registration_number)`                            |
+| Correo único en el módulo                      | `UNIQUE (module_id, lower(email))`                                   |
+| Una marca por estudiante y fecha (RN-03)         | `UNIQUE (student_id, class_session_id)`                              |
+| Una fecha de clase por día                      | `UNIQUE (module_id, class_date)`                                     |
+| No se borra información histórica (RN-08)      | Claves foráneas con `ON DELETE RESTRICT`                            |
 
 ---
 

@@ -31,20 +31,31 @@ export class AuthService {
 
   // RF-02
   async loginAdmin(dto: AdminLoginDto, ip: string) {
-    const tenant = await this.findActiveTenant(dto.tenant);
-    const user = tenant
-      ? await this.userModel.findOne({
-          where: { tenantId: tenant.id, [Op.and]: [lowerEquals('email', dto.email)] },
-        })
-      : null;
+    console.log('Begin loginAdmin', dto);
+    let tenant: Tenant | null = null;
+    let user: User | null = null;
 
-    if (!tenant || !user || !user.isActive || !(await compare(dto.password, user.passwordHash))) {
+    if (dto.tenant) {
+      tenant = await this.findActiveTenant(dto.tenant);
+      user = tenant
+        ? await this.userModel.findOne({
+            where: { tenantId: tenant.id, [Op.and]: [lowerEquals('email', dto.email)] },
+          })
+        : null;
+    } else {
+      user = await this.userModel.findOne({
+        where: { tenantId: null, role: 'superadmin', [Op.and]: [lowerEquals('email', dto.email)] },
+      });
+    }
+
+    console.log('User found:', user);
+    if (!user || !user.isActive || !(await compare(dto.password, user.passwordHash))) {
       throw new UnauthorizedException(INVALID_ADMIN_CREDENTIALS);
     }
 
     await user.update({ lastLoginAt: new Date() });
     await this.activityLogs.record({
-      tenantId: tenant.id,
+      tenantId: user.tenantId,
       actorType: 'admin',
       actorId: user.id,
       action: 'LOGIN',
@@ -56,14 +67,14 @@ export class AuthService {
     const principal: AdminPrincipal = {
       type: 'admin',
       sub: user.id,
-      tenantId: tenant.id,
+      tenantId: user.tenantId ?? '',
       role: user.role,
     };
 
     return {
       accessToken: await this.jwtService.signAsync(principal),
       user: { id: user.id, name: user.name, email: user.email, role: user.role },
-      tenant: this.tenantSummary(tenant),
+      tenant: tenant ? this.tenantSummary(tenant) : null,
     };
   }
 
