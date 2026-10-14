@@ -11,12 +11,16 @@ import {
   Post,
   Put,
 } from '@nestjs/common';
-import { AllowOnly } from '../auth/auth.decorators';
+import { AllowOnly, AllowRoles } from '../auth/auth.decorators';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
 import { TenantsService } from './repo/tenant.service';
 
+// Administración de la plataforma, no de una institución: estas rutas no filtran
+// por tenant, así que solo el superadmin puede usarlas. Con `@AllowOnly('admin')`
+// el admin de cualquier institución podía listar, modificar y borrar las demás
 @AllowOnly('admin')
+@AllowRoles('superadmin')
 @Controller('tenants')
 export class TenantsController {
   constructor(private readonly tenantsService: TenantsService) {}

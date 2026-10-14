@@ -10,7 +10,8 @@ import { JwtService } from '@nestjs/jwt';
 import { InjectModel } from '@nestjs/sequelize';
 import { Request } from 'express';
 import { AcademicModule } from '../../academic-modules/repo/academic-module.model';
-import { ALLOWED_TYPES_KEY, IS_PUBLIC_KEY } from '../auth.decorators';
+import { UserRole } from '../../users/repo/user.model';
+import { ALLOWED_ROLES_KEY, ALLOWED_TYPES_KEY, IS_PUBLIC_KEY } from '../auth.decorators';
 import { AuthPrincipal, PrincipalType, StudentPrincipal } from '../types/auth-principal';
 
 // Guard global: toda ruta exige JWT salvo las marcadas con @Public()
@@ -47,6 +48,12 @@ export class AuthGuard implements CanActivate {
 
     const allowed = this.reflector.getAllAndOverride<PrincipalType[]>(ALLOWED_TYPES_KEY, targets);
     if (allowed && !allowed.includes(request.user.type)) {
+      throw new ForbiddenException('No tienes permiso para realizar esta acción');
+    }
+
+    // Rutas que exigen un rol concreto, como las de administración de la plataforma
+    const allowedRoles = this.reflector.getAllAndOverride<UserRole[]>(ALLOWED_ROLES_KEY, targets);
+    if (allowedRoles && (request.user.type !== 'admin' || !allowedRoles.includes(request.user.role))) {
       throw new ForbiddenException('No tienes permiso para realizar esta acción');
     }
 
