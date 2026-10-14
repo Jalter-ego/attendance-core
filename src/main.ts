@@ -12,6 +12,8 @@ async function bootstrap() {
     origin: buildCorsOriginCheck(process.env.CORS_ORIGIN),
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     allowedHeaders: 'Content-Type, Accept, Authorization',
+    // Sin esto el navegador no deja leer el nombre del archivo que se descarga (RF-17)
+    exposedHeaders: 'Content-Disposition',
   });
 
   app.useGlobalPipes(
