@@ -6,8 +6,8 @@ const { hashSync } = require('bcryptjs');
 // Datos de prueba para desarrollo: institución "demo", un admin y un módulo activo
 const SLUG = 'demo';
 const TIMEZONE = 'America/La_Paz';
-const ADMIN_EMAIL = 'admin@demo.com';
-const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD || 'Admin123!';
+const ADMIN_EMAIL = 'admin@core.com';
+const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD || 'demo!';
 
 // Fecha 'YYYY-MM-DD' en la zona horaria del tenant, desplazada `offsetDays` desde hoy
 const dateInTimezone = (offsetDays) => {
