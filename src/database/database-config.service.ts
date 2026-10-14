@@ -34,15 +34,13 @@ export class DatabaseConfigService implements SequelizeOptionsFactory {
         evict: 10000,
         acquire: 20000,
       },
-      dialectOptions: {
-        ssl: {
-          require: true,
-          rejectUnauthorized: false,
-        },
-      },
+      dialectOptions:
+        this.configService.get<string>('DB_SSL') !== 'false'
+          ? { ssl: { require: true, rejectUnauthorized: false } }
+          : {},
       autoLoadModels: true,
       synchronize: false,
-      logging : true,
+      logging: console.log,
     };
   }
 }

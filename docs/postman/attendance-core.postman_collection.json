@@ -1,0 +1,530 @@
+{
+  "info": {
+    "name": "Attendance Core",
+    "description": "Endpoints del backend de asistencia. Ejecuta las requests en orden: el login guarda el token y 'Crear borrador' guarda el moduleId.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000/core/api/v1"
+    },
+    {
+      "key": "tenant",
+      "value": "demo"
+    },
+    {
+      "key": "excelDir",
+      "value": "G:/Diplo-mod2/attendance/attendance-core/docs/excel-ejemplos"
+    },
+    {
+      "key": "adminToken",
+      "value": ""
+    },
+    {
+      "key": "studentToken",
+      "value": ""
+    },
+    {
+      "key": "moduleId",
+      "value": ""
+    },
+    {
+      "key": "studentId",
+      "value": ""
+    },
+    {
+      "key": "classSessionId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Auth",
+      "item": [
+        {
+          "name": "Login admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  pm.collectionVariables.set('adminToken', pm.response.json().accessToken);",
+                  "  console.log('adminToken guardado');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/auth/admin/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant\": \"{{tenant}}\",\n  \"email\": \"admin@demo.com\",\n  \"password\": \"Admin123!\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Login estudiante",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  pm.collectionVariables.set('studentToken', pm.response.json().accessToken);",
+                  "  console.log('studentToken guardado');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/auth/student/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant\": \"{{tenant}}\",\n  \"identifier\": \"1001\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Quién soy (admin)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/auth/me"
+          }
+        },
+        {
+          "name": "Quién soy (estudiante)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{studentToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/auth/me"
+          }
+        },
+        {
+          "name": "Logout admin",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/logout"
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Módulos",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{adminToken}}",
+            "type": "string"
+          }
+        ]
+      },
+      "item": [
+        {
+          "name": "Módulo activo",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/modules/active"
+          }
+        },
+        {
+          "name": "Listar módulos",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/modules"
+          }
+        },
+        {
+          "name": "Crear borrador",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  pm.collectionVariables.set('moduleId', pm.response.json().id);",
+                  "  console.log('moduleId guardado');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/modules",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Módulo 3 - Backend\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Importar estudiantes",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/modules/{{moduleId}}/students/import",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "G:/Diplo-mod2/attendance/attendance-core/docs/excel-ejemplos/estudiantes.xlsx"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Importar estudiantes (con errores)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/modules/{{moduleId}}/students/import",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "G:/Diplo-mod2/attendance/attendance-core/docs/excel-ejemplos/estudiantes-con-errores.xlsx"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Importar fechas",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/modules/{{moduleId}}/sessions/import",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "G:/Diplo-mod2/attendance/attendance-core/docs/excel-ejemplos/fechas.xlsx"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Importar fechas (con errores)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/modules/{{moduleId}}/sessions/import",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "G:/Diplo-mod2/attendance/attendance-core/docs/excel-ejemplos/fechas-con-errores.xlsx"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Vista previa del borrador",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/modules/{{moduleId}}"
+          }
+        },
+        {
+          "name": "Activar módulo",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/modules/{{moduleId}}/activate",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"confirm\": true\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Asistencia (estudiante)",
+      "description": "Usa el token de 'Login estudiante'.",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{studentToken}}",
+            "type": "string"
+          }
+        ]
+      },
+      "item": [
+        {
+          "name": "Clase de hoy",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/attendance/today"
+          }
+        },
+        {
+          "name": "Marcar asistencia",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/attendance/mark"
+          }
+        },
+        {
+          "name": "Mi historial",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/attendance/me"
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Administración",
+      "description": "Usa el token de 'Login admin'. 'Vista general' guarda un studentId y un classSessionId de una fecha pasada para probar 'Modificar asistencia'.",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{adminToken}}",
+            "type": "string"
+          }
+        ]
+      },
+      "item": [
+        {
+          "name": "Lista de estudiantes",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/students"
+          }
+        },
+        {
+          "name": "Buscar estudiante",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/students?search=mar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "students"
+              ],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "mar",
+                  "description": "Nombre o número de registro"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Vista general",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const body = pm.response.json();",
+                  "  const record = body.records.find((r) => r.session.classDate < body.today) || body.records[0];",
+                  "  if (record) {",
+                  "    pm.collectionVariables.set('studentId', record.student.id);",
+                  "    pm.collectionVariables.set('classSessionId', record.session.id);",
+                  "    console.log('Guardado', record.student.fullName, record.session.classDate);",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/attendances"
+          }
+        },
+        {
+          "name": "Vista general por fecha",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/attendances?date=2026-10-13",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "attendances"
+              ],
+              "query": [
+                {
+                  "key": "date",
+                  "value": "2026-10-13",
+                  "description": "AAAA-MM-DD"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Vista general por estudiante",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/attendances?studentId={{studentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "attendances"
+              ],
+              "query": [
+                {
+                  "key": "studentId",
+                  "value": "{{studentId}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Modificar asistencia",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/attendances",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"studentId\": \"{{studentId}}\",\n  \"classSessionId\": \"{{classSessionId}}\",\n  \"status\": \"present\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Historial de actividades",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/activity-logs"
+          }
+        },
+        {
+          "name": "Historial de un estudiante",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/activity-logs?studentId={{studentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "activity-logs"
+              ],
+              "query": [
+                {
+                  "key": "studentId",
+                  "value": "{{studentId}}"
+                },
+                {
+                  "key": "date",
+                  "value": "2026-10-13",
+                  "disabled": true
+                },
+                {
+                  "key": "limit",
+                  "value": "50",
+                  "disabled": true
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "disabled": true
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

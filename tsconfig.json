@@ -9,6 +9,7 @@
     "experimentalDecorators": true,
     "allowSyntheticDefaultImports": true,
     "target": "ES2023",
+    "useDefineForClassFields": false,
     "sourceMap": true,
     "outDir": "./dist",
     "rootDir": ".",
@@ -16,6 +17,6 @@
     "skipLibCheck": true,
     "strict": true,
     "strictPropertyInitialization": false,
-    "types": ["vitest/globals", "node"]
+    "types": ["vitest/globals", "node", "multer"]
   }
 }
