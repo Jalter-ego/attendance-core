@@ -9,9 +9,11 @@ import { ClassSession } from '../../class-sessions/repo/class-session.model';
 import { toSessionView } from '../../class-sessions/repo/class-session.view';
 import { Student } from '../../students/repo/student.model';
 import { TenantsService } from '../../tenants/repo/tenant.service';
+import { toFileSlug } from '../../../common/excel/excel-writer';
 import { AttendanceOverviewQuery } from '../dto/attendance-overview.query';
 import { UpdateAttendanceDto } from '../dto/update-attendance.dto';
-import { countStatuses, resolveSessionStatus } from './attendance-status';
+import { buildAttendanceWorkbook } from './attendance-export';
+import { countStatuses, resolveSessionStatus, SessionAttendanceStatus } from './attendance-status';
 import { Attendance } from './attendance.model';
 
 const studentView = (s: Student) => ({ id: s.id, registrationNumber: s.registrationNumber, fullName: s.fullName });
@@ -29,8 +31,8 @@ export class AttendanceAdminService {
     private readonly activityLogs: ActivityLogsService,
   ) {}
 
-  // RF-08: asistencia de todos los estudiantes, filtrable por fecha y por estudiante, con totales
-  async overview(admin: AdminPrincipal, query: AttendanceOverviewQuery) {
+  // Carga común de la vista general: la usan la consulta (RF-08) y el export (RF-17)
+  private async loadOverview(admin: AdminPrincipal, query: AttendanceOverviewQuery) {
     const module = await this.academicModules.requireActive(admin.tenantId);
     const [today, sessions, students] = await Promise.all([
       this.tenants.todayFor(admin.tenantId),
@@ -59,16 +61,37 @@ export class AttendanceAdminService {
     });
     const recorded = new Map(attendances.map((a) => [`${a.studentId}:${a.classSessionId}`, a]));
 
+    // Estado y hora de cada cruce estudiante × fecha
+    const cells = new Map<string, { status: SessionAttendanceStatus; markedAt: Date | null }>();
+    for (const session of sessions) {
+      for (const student of students) {
+        const key = `${student.id}:${session.id}`;
+        const attendance = recorded.get(key) ?? null;
+        const status = resolveSessionStatus(session.classDate, today, attendance?.status ?? null);
+        cells.set(key, {
+          status,
+          markedAt: status === 'present' ? (attendance?.markedAt ?? null) : null,
+        });
+      }
+    }
+
+    return { module, today, sessions, students, recorded, cells };
+  }
+
+  // RF-08: asistencia de todos los estudiantes, filtrable por fecha y por estudiante, con totales
+  async overview(admin: AdminPrincipal, query: AttendanceOverviewQuery) {
+    const { module, today, sessions, students, recorded, cells } = await this.loadOverview(admin, query);
+
     const records = sessions.flatMap((session) =>
       students.map((student) => {
-        const attendance = recorded.get(`${student.id}:${session.id}`) ?? null;
-        const status = resolveSessionStatus(session.classDate, today, attendance?.status ?? null);
+        const key = `${student.id}:${session.id}`;
+        const cell = cells.get(key)!;
         return {
           student: studentView(student),
           session: toSessionView(session),
-          status,
-          markedAt: status === 'present' ? (attendance?.markedAt ?? null) : null,
-          source: attendance?.source ?? null,
+          status: cell.status,
+          markedAt: cell.markedAt,
+          source: recorded.get(key)?.source ?? null,
         };
       }),
     );
@@ -80,6 +103,27 @@ export class AttendanceAdminService {
       totals: countStatuses(records),
       records,
     };
+  }
+
+  // RF-17: la misma vista general como archivo .xlsx
+  async exportOverview(admin: AdminPrincipal, query: AttendanceOverviewQuery) {
+    const { module, today, sessions, students, cells } = await this.loadOverview(admin, query);
+
+    const buffer = await buildAttendanceWorkbook({
+      moduleName: module.name,
+      today,
+      // Con filtro de estudiante hay uno solo: se nombra en la hoja
+      filters: {
+        date: query.date ?? null,
+        studentName: query.studentId ? (students[0]?.fullName ?? null) : null,
+      },
+      students,
+      sessions,
+      cells,
+    });
+
+    const parts = ['asistencias', toFileSlug(module.name, 'modulo'), query.date ?? today];
+    return { buffer, filename: `${parts.join('-')}.xlsx` };
   }
 
   // RF-07: cambia Presente/Falta en cualquier fecha del módulo activo, incluso pasada. Queda auditado (RN-07)
