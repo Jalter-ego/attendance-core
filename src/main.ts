@@ -1,12 +1,15 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { buildCorsOriginCheck } from './config/cors';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   app.enableCors({
-    origin: process.env.CORS_ORIGIN || '*',
+    // Acepta una lista separada por comas, con `*` como comodín de subdominio,
+    // porque el frontend resuelve el tenant desde el subdominio
+    origin: buildCorsOriginCheck(process.env.CORS_ORIGIN),
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     allowedHeaders: 'Content-Type, Accept, Authorization',
   });
