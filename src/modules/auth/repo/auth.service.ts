@@ -31,7 +31,6 @@ export class AuthService {
 
   // RF-02
   async loginAdmin(dto: AdminLoginDto, ip: string) {
-    console.log('Begin loginAdmin', dto);
     let tenant: Tenant | null = null;
     let user: User | null = null;
 
@@ -48,7 +47,6 @@ export class AuthService {
       });
     }
 
-    console.log('User found:', user);
     if (!user || !user.isActive || !(await compare(dto.password, user.passwordHash))) {
       throw new UnauthorizedException(INVALID_ADMIN_CREDENTIALS);
     }
