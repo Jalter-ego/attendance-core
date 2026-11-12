@@ -12,13 +12,6 @@ module.exports = {
             primaryKey: true,
             defaultValue: Sequelize.literal('gen_random_uuid()'),
           },
-          tenant_id: {
-            type: Sequelize.UUID,
-            allowNull: false,
-            references: { model: 'tenants', key: 'id' },
-            onUpdate: 'CASCADE',
-            onDelete: 'RESTRICT',
-          },
           module_id: {
             type: Sequelize.UUID,
             allowNull: false,

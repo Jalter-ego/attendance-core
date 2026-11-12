@@ -12,13 +12,6 @@ module.exports = {
             primaryKey: true,
             defaultValue: Sequelize.literal('gen_random_uuid()'),
           },
-          tenant_id: {
-            type: Sequelize.UUID,
-            allowNull: false,
-            references: { model: 'tenants', key: 'id' },
-            onUpdate: 'CASCADE',
-            onDelete: 'RESTRICT',
-          },
           name: { type: Sequelize.STRING(150), allowNull: false },
           status: { type: Sequelize.STRING(20), allowNull: false, defaultValue: 'draft' },
           activated_at: { type: Sequelize.DATE, allowNull: true },
@@ -44,16 +37,16 @@ module.exports = {
         transaction,
       });
 
-      // RN-01: un solo módulo activo por tenant
-      await queryInterface.addIndex('modules', ['tenant_id'], {
-        name: 'modules_one_active_per_tenant',
+      // RN-01: un solo módulo activo en la instalación
+      await queryInterface.addIndex('modules', ['status'], {
+        name: 'modules_one_active',
         unique: true,
         where: { status: 'active' },
         transaction,
       });
 
-      await queryInterface.addIndex('modules', ['tenant_id', 'status'], {
-        name: 'modules_tenant_status_idx',
+      await queryInterface.addIndex('modules', ['status'], {
+        name: 'modules_status_idx',
         transaction,
       });
     });

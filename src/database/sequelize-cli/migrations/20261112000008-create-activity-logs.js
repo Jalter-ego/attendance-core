@@ -13,14 +13,6 @@ module.exports = {
             primaryKey: true,
             defaultValue: Sequelize.literal('gen_random_uuid()'),
           },
-          // NULL en acciones del super-admin de la plataforma
-          tenant_id: {
-            type: Sequelize.UUID,
-            allowNull: true,
-            references: { model: 'tenants', key: 'id' },
-            onUpdate: 'CASCADE',
-            onDelete: 'RESTRICT',
-          },
           // NULL en acciones sin módulo, como un login sin módulo activo
           module_id: {
             type: Sequelize.UUID,
@@ -52,8 +44,8 @@ module.exports = {
       });
 
       // RF-10: historial del módulo filtrado por fecha
-      await queryInterface.addIndex('activity_logs', ['tenant_id', 'module_id', 'created_at'], {
-        name: 'activity_logs_tenant_module_created_idx',
+      await queryInterface.addIndex('activity_logs', ['module_id', 'created_at'], {
+        name: 'activity_logs_module_created_idx',
         transaction,
       });
 

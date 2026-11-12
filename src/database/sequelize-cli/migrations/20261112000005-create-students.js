@@ -12,13 +12,6 @@ module.exports = {
             primaryKey: true,
             defaultValue: Sequelize.literal('gen_random_uuid()'),
           },
-          tenant_id: {
-            type: Sequelize.UUID,
-            allowNull: false,
-            references: { model: 'tenants', key: 'id' },
-            onUpdate: 'CASCADE',
-            onDelete: 'RESTRICT',
-          },
           module_id: {
             type: Sequelize.UUID,
             allowNull: false,
@@ -47,6 +40,8 @@ module.exports = {
         'CREATE UNIQUE INDEX students_module_email_unique ON students (module_id, lower(email));',
         { transaction },
       );
+
+      await queryInterface.sequelize.query('CREATE EXTENSION IF NOT EXISTS pg_trgm;', { transaction });
 
       // RF-06: búsqueda por nombre
       await queryInterface.sequelize.query(
