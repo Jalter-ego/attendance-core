@@ -5,7 +5,6 @@ import {
   IsIn,
   IsOptional,
   IsString,
-  IsUUID,
   MaxLength,
   MinLength,
 } from 'class-validator';
@@ -34,15 +33,10 @@ export class UpdateUserDto {
 
   @Transform(trim)
   @IsOptional()
-  @IsIn(['owner', 'admin', 'superadmin'], {
-    message: 'El rol debe ser owner, admin o superadmin',
+  @IsIn(['owner', 'admin'], {
+    message: 'El rol debe ser owner o admin',
   })
   role?: UserRole;
-
-  @Transform(trim)
-  @IsOptional()
-  @IsUUID('4', { message: 'El tenantId debe ser un UUID válido' })
-  tenantId?: string;
 
   @IsOptional()
   @IsBoolean({ message: 'isActive debe ser un valor booleano' })

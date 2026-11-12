@@ -1,19 +1,8 @@
-/* Resolución de orígenes permitidos para CORS.
- *
- * El frontend resuelve la institución desde el subdominio
- * (`demo.localhost:5173`, `wabi.attlasian.test:5173`), así que un único valor en
- * `CORS_ORIGIN` no alcanza: cada subdominio es un origen distinto para el
- * navegador. Aquí se admite una lista separada por comas, y cada entrada puede
- * llevar `*` en lugar del subdominio.
- *
- * Ejemplos de `CORS_ORIGIN`:
- *   *                                              → cualquier origen
- *   http://localhost:5173,http://*.localhost:5173  → localhost y sus subdominios
- */
+/* Lista de orígenes del frontend. Se admiten dominios exactos y comodines explícitos. */
 
 const ALLOW_ALL = '*'
 
-/** `*` cubre una sola etiqueta de dominio, con la forma de un slug de tenant */
+/** `*` cubre una sola etiqueta de dominio, sin incluir puntos */
 const WILDCARD_LABEL = '[a-z0-9]+(?:-[a-z0-9]+)*'
 
 function patternToRegExp(pattern: string): RegExp {

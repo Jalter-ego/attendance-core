@@ -20,7 +20,7 @@ export class ClassSessionsService {
 
   // RF-12: reemplaza las fechas del borrador por las del archivo. Si hay errores no guarda nada
   async importForModule(admin: AdminPrincipal, moduleId: string, file: Express.Multer.File, ip: string) {
-    await this.academicModules.findDraftOrFail(admin.tenantId, moduleId);
+    await this.academicModules.findDraftOrFail(moduleId);
 
     const sheet = await readExcelSheet(file.buffer, SESSION_COLUMNS).catch(rethrowExcelReadError);
     if (sheet.errors.length > 0) throwImportErrors(sheet.errors);
@@ -32,15 +32,14 @@ export class ClassSessionsService {
     }
 
     await this.sequelize.transaction(async (transaction) => {
-      await this.academicModules.findDraftOrFail(admin.tenantId, moduleId, transaction);
+      await this.academicModules.findDraftOrFail(moduleId, transaction);
       await this.classSessionModel.destroy({ where: { moduleId }, transaction });
       await this.classSessionModel.bulkCreate(
-        sessions.map((session) => ({ ...session, tenantId: admin.tenantId, moduleId })),
+        sessions.map((session) => ({ ...session, moduleId })),
         { transaction },
       );
       await this.activityLogs.record(
         {
-          tenantId: admin.tenantId,
           moduleId,
           actorType: 'admin',
           actorId: admin.sub,

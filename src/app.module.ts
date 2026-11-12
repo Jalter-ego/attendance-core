@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { InstitutionModule } from './institution/institution.module';
+import { HealthController } from './health/health.controller';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ConfigModule } from './config/config.module';
@@ -9,15 +11,14 @@ import { AttendancesModule } from './modules/attendances/attendances.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { ClassSessionsModule } from './modules/class-sessions/class-sessions.module';
 import { StudentsModule } from './modules/students/students.module';
-import { TenantsModule } from './modules/tenants/tenants.module';
 import { UsersModule } from './modules/users/users.module';
 
 @Module({
   imports: [
     ConfigModule,
+    InstitutionModule,
     DatabaseModule,
     AuthModule,
-    TenantsModule,
     UsersModule,
     AcademicModulesModule,
     StudentsModule,
@@ -25,7 +26,7 @@ import { UsersModule } from './modules/users/users.module';
     AttendancesModule,
     ActivityLogsModule,
   ],
-  controllers: [AppController],
+  controllers: [AppController, HealthController],
   providers: [AppService],
 })
 export class AppModule {}

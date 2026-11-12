@@ -22,7 +22,7 @@ export class StudentsService {
 
   // RF-06: estudiantes del módulo activo; busca por nombre (en cualquier parte) o por registro (desde el inicio)
   async listActive(admin: AdminPrincipal, search?: string) {
-    const module = await this.academicModules.requireActive(admin.tenantId);
+    const module = await this.academicModules.requireActive();
 
     const where: WhereOptions<Student> = { moduleId: module.id };
     if (search) {
@@ -47,7 +47,7 @@ export class StudentsService {
 
   // RF-11: reemplaza los estudiantes del borrador por los del archivo. Si hay errores no guarda nada
   async importForModule(admin: AdminPrincipal, moduleId: string, file: Express.Multer.File, ip: string) {
-    await this.academicModules.findDraftOrFail(admin.tenantId, moduleId);
+    await this.academicModules.findDraftOrFail(moduleId);
 
     const sheet = await readExcelSheet(file.buffer, STUDENT_COLUMNS).catch(rethrowExcelReadError);
     if (sheet.errors.length > 0) throwImportErrors(sheet.errors);
@@ -59,15 +59,14 @@ export class StudentsService {
     }
 
     await this.sequelize.transaction(async (transaction) => {
-      await this.academicModules.findDraftOrFail(admin.tenantId, moduleId, transaction);
+      await this.academicModules.findDraftOrFail(moduleId, transaction);
       await this.studentModel.destroy({ where: { moduleId }, transaction });
       await this.studentModel.bulkCreate(
-        students.map((student) => ({ ...student, tenantId: admin.tenantId, moduleId })),
+        students.map((student) => ({ ...student, moduleId })),
         { transaction },
       );
       await this.activityLogs.record(
         {
-          tenantId: admin.tenantId,
           moduleId,
           actorType: 'admin',
           actorId: admin.sub,

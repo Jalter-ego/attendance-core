@@ -1,17 +1,11 @@
-import { BelongsTo, Column, DataType, ForeignKey, Model, Table } from 'sequelize-typescript';
-import { Tenant } from '../../tenants/repo/tenant.model';
+import { Column, DataType, Model, Table } from 'sequelize-typescript';
 
-export type UserRole = 'owner' | 'admin' | 'superadmin';
+export type UserRole = 'owner' | 'admin';
 
 @Table({ tableName: 'users', underscored: true })
 export class User extends Model {
   @Column({ type: DataType.UUID, primaryKey: true, defaultValue: DataType.UUIDV4 })
   id: string;
-
-  // NULL solo para el super-admin de la plataforma
-  @ForeignKey(() => Tenant)
-  @Column({ type: DataType.UUID, allowNull: true })
-  tenantId: string | null;
 
   @Column({ type: DataType.STRING(150), allowNull: false })
   name: string;
@@ -30,7 +24,4 @@ export class User extends Model {
 
   @Column({ type: DataType.DATE, allowNull: true })
   lastLoginAt: Date | null;
-
-  @BelongsTo(() => Tenant)
-  tenant: Tenant | null;
 }

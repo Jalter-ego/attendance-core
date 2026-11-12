@@ -10,10 +10,6 @@
       "value": "http://localhost:5000/core/api/v1"
     },
     {
-      "key": "tenant",
-      "value": "demo"
-    },
-    {
       "key": "excelDir",
       "value": "G:/Diplo-mod2/attendance/attendance-core/docs/excel-ejemplos"
     },
@@ -72,7 +68,7 @@
             "url": "{{baseUrl}}/auth/admin/login",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"tenant\": \"{{tenant}}\",\n  \"email\": \"admin@demo.com\",\n  \"password\": \"Admin123!\"\n}"
+              "raw": "{\n  \"email\": \"admin@core.com\",\n  \"password\": \"demo!\"\n}"
             }
           }
         },
@@ -106,7 +102,7 @@
             "url": "{{baseUrl}}/auth/student/login",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"tenant\": \"{{tenant}}\",\n  \"identifier\": \"1001\"\n}"
+              "raw": "{\n  \"identifier\": \"1001\"\n}"
             }
           }
         },

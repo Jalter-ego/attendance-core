@@ -8,7 +8,6 @@ async function bootstrap() {
 
   app.enableCors({
     // Acepta una lista separada por comas, con `*` como comodín de subdominio,
-    // porque el frontend resuelve el tenant desde el subdominio
     origin: buildCorsOriginCheck(process.env.CORS_ORIGIN),
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     allowedHeaders: 'Content-Type, Accept, Authorization',
