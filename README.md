@@ -2,7 +2,11 @@
 
 Backend del sistema web de registro y control de asistencia, desarrollado con [NestJS](https://nestjs.com/) y [Sequelize](https://sequelize.org/) sobre PostgreSQL.
 
-Es **multi-tenant** (SaaS): cada institución es un *tenant* con sus propios administradores, módulos, estudiantes y asistencias. En cada institución hay un solo **módulo académico activo** a la vez; al activar uno nuevo, el anterior se archiva sin borrar sus datos.
+Cada instalación atiende a **una sola institución** y tiene su propia base PostgreSQL, backend y frontend. La futura plataforma será responsable de crear y administrar esas instalaciones. Attendance no selecciona instituciones por subdominio ni contiene la administración de clientes de la plataforma.
+
+Hay un solo **módulo académico activo** a la vez; al activar uno nuevo, el anterior se archiva sin borrar sus datos.
+
+Las migraciones crean las tablas para una sola institución en el esquema predeterminado de PostgreSQL (`public`), sin crear esquemas adicionales ni comprobar el esquema al arrancar. Puedes reutilizar la base actual después de borrar las tablas anteriores. Al reiniciarla, elimina también `SequelizeMeta`, que guarda el historial de migraciones, y vuelve a ejecutar `pnpm db:migrate`.
 
 ---
 
@@ -23,7 +27,7 @@ Es **multi-tenant** (SaaS): cada institución es un *tenant* con sus propios adm
 ## Requisitos previos
 
 - **Node.js:** `v24.15.0` o superior
-- **Gestor de paquetes:** `pnpm`. Viene con Node a través de Corepack: `corepack enable`
+- **Gestor de paquetes:** `pnpm`, instalado en tu equipo.
 - **Base de datos:** PostgreSQL 13 o superior
 
 ---
@@ -35,17 +39,41 @@ Es **multi-tenant** (SaaS): cada institución es un *tenant* con sus propios adm
    ```bash
    pnpm install
    ```
-2. **Variables de entorno.** Copia el archivo de ejemplo y ajusta los valores:
+2. **Variables de entorno.** Si no tienes `.env`, copia el ejemplo. Si ya existe, actualiza sus valores sin sobrescribirlo:
 
    ```bash
    cp .env.example .env
    ```
-3. **Crear las tablas y cargar los datos de prueba:**
+3. Configura una base sin las tablas anteriores (puedes reutilizar la actual después de borrarlas) y ajusta `DB_READ_*` y `DB_WRITE_*`. Por ahora ambos pueden apuntar al mismo PostgreSQL. Ajusta también:
+
+   | Variable | Uso |
+   | --- | --- |
+   | `INSTITUTION_NAME` | Nombre mostrado en el frontend. |
+   | `INSTITUTION_TIMEZONE` | Zona IANA para las fechas de asistencia, por ejemplo `America/La_Paz`. |
+   | `CORS_ORIGIN` | URL del frontend; admite varias separadas por comas. |
+   | `DB_SSL` | `false` para PostgreSQL local; según la conexión para producción. |
+   | `JWT_SECRET` | Secreto largo y aleatorio **distinto en cada instalación**. Evita que un token de un cliente funcione en otro. |
+   | `JWT_EXPIRES_IN` | Duración del token, por defecto `8h`. |
+
+4. **Crear las tablas:**
 
    ```bash
    pnpm db:migrate
-   pnpm db:seed
    ```
+
+5. Elige una forma de inicialización:
+
+   - **Instalación de cliente:** configura `BOOTSTRAP_ADMIN_NAME`, `BOOTSTRAP_ADMIN_EMAIL` y `BOOTSTRAP_ADMIN_PASSWORD` (mínimo 12 caracteres y máximo 72 bytes), y ejecuta:
+
+     ```bash
+     pnpm instance:bootstrap
+     ```
+
+     Crea el primer `owner`. Puedes repetirlo: si ya hay un owner activo, no cambia credenciales ni crea duplicados. No carga estudiantes ni módulos de prueba. Retira la contraseña de bootstrap del entorno del servicio después de inicializarlo.
+
+   - **Desarrollo con datos de ejemplo:** en una base descartable y sin usuarios ejecuta `pnpm db:seed`. No combines el demo con el bootstrap.
+
+No subas `.env` ni secretos a Git. La futura automatización debe suministrarlos a cada backend por separado.
 
 ---
 
@@ -74,8 +102,8 @@ http://localhost:5000/core/api/v1
 
 | Rol                     | Cómo ingresa                                         | Qué puede hacer                                                                            |
 | ----------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| **Administrador** | Institución + correo + contraseña                   | Crea e importa módulos, consulta y corrige asistencias, revisa el historial de actividades |
-| **Estudiante**    | Institución + correo **o** número de registro | Marca su asistencia el día de clase y consulta su historial                                |
+| **Administrador** | Correo + contraseña                   | Crea e importa módulos, consulta y corrige asistencias, revisa el historial de actividades |
+| **Estudiante**    | Correo **o** número de registro | Marca su asistencia el día de clase y consulta su historial                                |
 
 Al iniciar sesión se recibe un **JWT** que se envía en cada petición:
 
@@ -83,9 +111,9 @@ Al iniciar sesión se recibe un **JWT** que se envía en cada petición:
 Authorization: Bearer <accessToken>
 ```
 
-El token indica quién es el usuario, su institución (`tenantId`) y, en el caso del estudiante, su módulo. Todas las consultas se filtran por esa institución, así que un tenant nunca ve los datos de otro.
+El token indica quién es el usuario y, en el caso del estudiante, su módulo. El aislamiento entre clientes lo proporciona su instalación y base independiente. Los administradores tienen roles `owner` o `admin`; solo el `owner` administra cuentas mediante `/users`.
 
-Todas las rutas exigen token, salvo los logins. Cada ruta además está restringida a un rol: si un estudiante llama a una ruta de admin, o al revés, recibe `403`.
+Las rutas de negocio exigen token. Son públicos los logins, la raíz, `GET /institution` (nombre y zona horaria) y `GET /health` (conexión a la base; devuelve 503 si falla). Cada ruta además está restringida a un rol: si un estudiante llama a una ruta de admin, o al revés, recibe `403`.
 
 ### Ciclo de vida de un módulo académico
 
@@ -177,7 +205,7 @@ Todas las rutas van bajo `http://localhost:5000/core/api/v1`.
 **POST `/auth/admin/login`**
 
 ```json
-{ "tenant": "demo", "email": "admin@demo.com", "password": "Admin123!" }
+{ "email": "admin@core.com", "password": "demo!" }
 ```
 
 Respuesta `200`:
@@ -185,15 +213,15 @@ Respuesta `200`:
 ```json
 {
   "accessToken": "eyJhbGciOi...",
-  "user": { "id": "…", "name": "Administrador Demo", "email": "admin@demo.com", "role": "owner" },
-  "tenant": { "id": "…", "name": "Institución Demo", "slug": "demo" }
+  "user": { "id": "…", "name": "Administrador Demo", "email": "admin@core.com", "role": "owner" },
+  "institution": { "name": "Mi Institución", "timezone": "America/La_Paz" }
 }
 ```
 
 **POST `/auth/student/login`**. `identifier` acepta el correo o el número de registro:
 
 ```json
-{ "tenant": "demo", "identifier": "1001" }
+{ "identifier": "1001" }
 ```
 
 Respuesta `200`:
@@ -203,7 +231,7 @@ Respuesta `200`:
   "accessToken": "eyJhbGciOi...",
   "student": { "id": "…", "registrationNumber": "1001", "fullName": "Juan Pérez", "email": "juan@gmail.com" },
   "module": { "id": "…", "name": "Módulo de prueba" },
-  "tenant": { "id": "…", "name": "Institución Demo", "slug": "demo" }
+  "institution": { "name": "Mi Institución", "timezone": "America/La_Paz" }
 }
 ```
 
@@ -388,20 +416,26 @@ Respuesta `200`:
 
 ### Datos de prueba
 
-`pnpm db:seed` crea la institución **`demo`** con:
+`pnpm db:seed` carga los siguientes datos en la instalación configurada (solo desarrollo):
 
 | Qué            | Datos                                                                                                |
 | --------------- | ---------------------------------------------------------------------------------------------------- |
-| Admin           | `admin@demo.com` / `Admin123!`. La contraseña se cambia con la variable `SEED_ADMIN_PASSWORD` |
+| Admin           | `admin@core.com` / `demo!`. La contraseña se cambia con la variable `SEED_ADMIN_PASSWORD` |
 | Módulo activo  | "Módulo de prueba"                                                                                  |
 | Estudiantes     | `1001` Juan Pérez (`juan@gmail.com`) y `1002` María López (`maria@gmail.com`)             |
 | Fechas de clase | Hace 2 días, **hoy** y dentro de 2 días, de 18:00 a 21:00                                    |
 
-Las fechas se calculan el día en que corres el seeder, así que siempre hay una clase hoy para probar la marca. Para volver al estado inicial:
+Las fechas se calculan al ejecutar el seeder usando `INSTITUTION_TIMEZONE`. Para reiniciar el demo usa otra base descartable y vuelve a migrarla; el comando de deshacer el demo está deshabilitado para evitar borrar información añadida después.
+
+### Pruebas automáticas de la instalación
 
 ```bash
-pnpm db:seed:undo && pnpm db:seed
+pnpm test:instance
+pnpm lint
+pnpm build
 ```
+
+Las pruebas de instalación levantan la aplicación Nest con modelos simulados y comprueban login, permisos, validación de sesiones, rechazo de tokens de otra instalación y generación del SQL de las migraciones. **No sustituyen una prueba de migraciones con PostgreSQL real.** No leen ni modifican Supabase.
 
 ### Con Postman
 
@@ -420,8 +454,9 @@ pnpm db:seed:undo && pnpm db:seed
 ### Con curl
 
 ```bash
-BASE=http://localhost:5000/core/api/v1
-
+curl -X POST http://localhost:5000/core/api/v1/auth/student/login \
+  -H 'Content-Type: application/json' -d '{"identifier":"1001"}'
+```
 
 ### Flujo completo sugerido
 
@@ -472,7 +507,7 @@ pnpm db:migrate:status      # Estado de las migraciones
 pnpm db:migrate:undo        # Revierte la última migración
 pnpm db:migrate:undo:all    # Revierte todas las migraciones
 pnpm db:seed                # Carga los datos de prueba
-pnpm db:seed:undo           # Borra los datos de prueba
+pnpm instance:bootstrap     # Crea el primer owner de una instalación de cliente
 
 # Crear una migración o un seeder nuevo
 pnpm sequelize-cli migration:generate --name nombre_de_la_migracion
@@ -483,7 +518,6 @@ pnpm sequelize-cli seed:generate --name nombre_del_seeder
 
 | Tabla              | Contenido                                                         |
 | ------------------ | ----------------------------------------------------------------- |
-| `tenants`        | Instituciones, con su `slug` y zona horaria                     |
 | `users`          | Administradores                                                   |
 | `modules`        | Módulos académicos (`draft`, `active`, `archived`)        |
 | `students`       | Estudiantes de cada módulo                                       |
@@ -495,7 +529,7 @@ Las reglas de negocio también están protegidas en la base:
 
 | Regla                                            | Restricción                                                           |
 | ------------------------------------------------ | ---------------------------------------------------------------------- |
-| Un solo módulo activo por institución (RN-01)  | Índice único parcial `modules (tenant_id) WHERE status = 'active'` |
+| Un solo módulo activo por institución (RN-01)  | Índice único parcial `modules (status) WHERE status = 'active'` |
 | Número de registro único en el módulo (RN-02) | `UNIQUE (module_id, registration_number)`                            |
 | Correo único en el módulo                      | `UNIQUE (module_id, lower(email))`                                   |
 | Una marca por estudiante y fecha (RN-03)         | `UNIQUE (student_id, class_session_id)`                              |
@@ -515,9 +549,10 @@ src/
 ├── config/                         # Configuración global y variables de entorno
 ├── database/                       # Configuración de Sequelize y CLI
 │   └── sequelize-cli/              # Migraciones, seeders y config del CLI
+├── institution/                    # Nombre y zona horaria por instalación
+├── health/                         # Comprobación de conexión a la base
 ├── modules/                        # Módulos del negocio
 │   ├── auth/                       # Login, JWT, guard global y decoradores
-│   ├── tenants/                    # Instituciones
 │   ├── users/                      # Administradores
 │   ├── academic-modules/           # Módulos académicos (tabla `modules`)
 │   ├── students/                   # Estudiantes e importación
@@ -546,7 +581,17 @@ Cada módulo de negocio sigue esta estructura:
 ### Decoradores de autenticación
 
 ```ts
-@Public()                 // Ruta sin token (solo los logins)
+@Public()                 // Ruta pública
 @AllowOnly('admin')       // Restringe la ruta o el controller a un rol
-@CurrentUser() user       // Datos del token: { type, sub, tenantId, ... }
+@CurrentUser() user       // Datos del token: { type, sub, role o moduleId }
 ```
+
+## Contrato para el futuro despliegue
+
+1. Crear PostgreSQL y una base vacía por cliente (fuera de este repositorio).
+2. Proporcionar las variables del backend, incluida la identidad de la institución y un `JWT_SECRET` propio.
+3. Ejecutar `pnpm db:migrate` y `pnpm instance:bootstrap` una vez; arrancar con `pnpm start:prod` después de compilar.
+4. Servir el frontend y enviar `/core/api/v1` al backend mediante el proxy del servidor web. También se admite una API externa configurada en el frontend.
+5. Comprobar `GET /core/api/v1/health`.
+
+El nombre del dominio identifica el despliegue desde la plataforma; Attendance no lo interpreta. No se han creado aquí instancias, imágenes ni la plataforma de administración. Bootstrap y Sequelize CLI necesitan los archivos `scripts/` y `src/database/sequelize-cli/` junto con sus dependencias en la fase de inicialización; `dist/` por sí solo no los incluye.
