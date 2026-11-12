@@ -21,27 +21,27 @@ export class AcademicModulesService {
     private readonly activityLogs: ActivityLogsService,
   ) {}
 
-  async create(admin: AdminPrincipal, name: string) {
-    const module = await this.academicModuleModel.create({ tenantId: admin.tenantId, name, status: 'draft' });
+  async create(name: string) {
+    const module = await this.academicModuleModel.create({ name, status: 'draft' });
     return this.summary(module, 0, 0);
   }
 
-  async list(tenantId: string) {
+  async list() {
     const modules = await this.academicModuleModel.findAll({
-      where: { tenantId, status: { [Op.in]: VISIBLE_STATUSES } },
+      where: { status: { [Op.in]: VISIBLE_STATUSES } },
       order: [['createdAt', 'DESC']],
     });
     return Promise.all(modules.map(async (module) => this.summary(module, ...(await this.counts(module.id)))));
   }
 
-  async findActive(tenantId: string) {
-    const module = await this.requireActive(tenantId);
+  async findActive() {
+    const module = await this.requireActive();
     return this.summary(module, ...(await this.counts(module.id)));
   }
 
   // La operación diaria (asistencias, estudiantes) trabaja siempre sobre el módulo activo
-  async requireActive(tenantId: string): Promise<AcademicModule> {
-    const module = await this.academicModuleModel.findOne({ where: { tenantId, status: 'active' } });
+  async requireActive(): Promise<AcademicModule> {
+    const module = await this.academicModuleModel.findOne({ where: { status: 'active' } });
     if (!module) {
       throw new NotFoundException('No hay un módulo activo');
     }
@@ -49,8 +49,8 @@ export class AcademicModulesService {
   }
 
   // RF-16: vista previa con los estudiantes y las fechas cargadas
-  async findOne(tenantId: string, id: string) {
-    const module = await this.findVisible(tenantId, id);
+  async findOne(id: string) {
+    const module = await this.findVisible(id);
     const [students, sessions] = await Promise.all([
       this.studentModel.findAll({ where: { moduleId: id }, order: [['fullName', 'ASC']] }),
       this.classSessionModel.findAll({ where: { moduleId: id }, order: [['classDate', 'ASC']] }),
@@ -74,8 +74,8 @@ export class AcademicModulesService {
 
   // Para las importaciones: solo se cargan datos en un borrador.
   // Dentro de una transacción bloquea la fila, para no cruzarse con una activación
-  async findDraftOrFail(tenantId: string, id: string, transaction?: Transaction) {
-    const module = await this.findVisible(tenantId, id, transaction);
+  async findDraftOrFail(id: string, transaction?: Transaction) {
+    const module = await this.findVisible(id, transaction);
     if (module.status !== 'draft') {
       throw new ConflictException('Solo se pueden importar datos en un módulo en borrador');
     }
@@ -87,7 +87,7 @@ export class AcademicModulesService {
     try {
       return await this.sequelize.transaction(async (transaction) => {
         const module = await this.academicModuleModel.findOne({
-          where: { id, tenantId: admin.tenantId },
+          where: { id },
           lock: transaction.LOCK.UPDATE,
           transaction,
         });
@@ -107,7 +107,7 @@ export class AcademicModulesService {
 
         const now = new Date();
         const previous = await this.academicModuleModel.findOne({
-          where: { tenantId: admin.tenantId, status: 'active' },
+          where: { status: 'active' },
           lock: transaction.LOCK.UPDATE,
           transaction,
         });
@@ -119,7 +119,6 @@ export class AcademicModulesService {
 
         await this.activityLogs.record(
           {
-            tenantId: admin.tenantId,
             moduleId: module.id,
             actorType: 'admin',
             actorId: admin.sub,
@@ -147,9 +146,9 @@ export class AcademicModulesService {
     }
   }
 
-  private async findVisible(tenantId: string, id: string, transaction?: Transaction) {
+  private async findVisible(id: string, transaction?: Transaction) {
     const module = await this.academicModuleModel.findOne({
-      where: { id, tenantId, status: { [Op.in]: VISIBLE_STATUSES } },
+      where: { id, status: { [Op.in]: VISIBLE_STATUSES } },
       lock: transaction ? transaction.LOCK.UPDATE : undefined,
       transaction,
     });

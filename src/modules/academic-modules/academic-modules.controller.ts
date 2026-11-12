@@ -11,23 +11,23 @@ export class AcademicModulesController {
   constructor(private readonly academicModulesService: AcademicModulesService) {}
 
   @Post()
-  create(@CurrentUser() admin: AdminPrincipal, @Body() dto: CreateModuleDto) {
-    return this.academicModulesService.create(admin, dto.name);
+  create(@Body() dto: CreateModuleDto) {
+    return this.academicModulesService.create(dto.name);
   }
 
   @Get()
-  list(@CurrentUser() admin: AdminPrincipal) {
-    return this.academicModulesService.list(admin.tenantId);
+  list() {
+    return this.academicModulesService.list();
   }
 
   @Get('active')
-  findActive(@CurrentUser() admin: AdminPrincipal) {
-    return this.academicModulesService.findActive(admin.tenantId);
+  findActive() {
+    return this.academicModulesService.findActive();
   }
 
   @Get(':id')
-  findOne(@CurrentUser() admin: AdminPrincipal, @Param('id', ParseUUIDPipe) id: string) {
-    return this.academicModulesService.findOne(admin.tenantId, id);
+  findOne(@Param('id', ParseUUIDPipe) id: string) {
+    return this.academicModulesService.findOne(id);
   }
 
   @Post(':id/activate')
