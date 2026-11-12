@@ -6,7 +6,7 @@ import { ActivityLogsService } from '../../activity-logs/repo/activity-log.servi
 import { StudentPrincipal } from '../../auth/types/auth-principal';
 import { ClassSession } from '../../class-sessions/repo/class-session.model';
 import { toSessionView } from '../../class-sessions/repo/class-session.view';
-import { TenantsService } from '../../tenants/repo/tenant.service';
+import { InstitutionService } from '../../../institution/institution.service';
 import { countStatuses, resolveSessionStatus } from './attendance-status';
 import { Attendance } from './attendance.model';
 
@@ -17,13 +17,13 @@ export class AttendancesService {
     @InjectModel(Attendance) private readonly attendanceModel: typeof Attendance,
     @InjectModel(ClassSession) private readonly classSessionModel: typeof ClassSession,
     @InjectModel(AcademicModule) private readonly academicModuleModel: typeof AcademicModule,
-    private readonly tenants: TenantsService,
+    private readonly institution: InstitutionService,
     private readonly activityLogs: ActivityLogsService,
   ) {}
 
   // Para el botón de marcar: si hoy hay clase y si ya marcó
   async today(student: StudentPrincipal) {
-    const today = await this.tenants.todayFor(student.tenantId);
+    const today = this.institution.today();
     const session = await this.classSessionModel.findOne({
       where: { moduleId: student.moduleId, classDate: today },
     });
@@ -41,7 +41,7 @@ export class AttendancesService {
 
   // RF-03: una sola marca por estudiante y fecha de clase, y solo el día de la clase (RN-03, RN-04)
   async markToday(student: StudentPrincipal, ip: string) {
-    const today = await this.tenants.todayFor(student.tenantId);
+    const today = this.institution.today();
     const session = await this.classSessionModel.findOne({
       where: { moduleId: student.moduleId, classDate: today },
     });
@@ -52,7 +52,6 @@ export class AttendancesService {
     let attendance: Attendance;
     try {
       attendance = await this.attendanceModel.create({
-        tenantId: student.tenantId,
         moduleId: student.moduleId,
         studentId: student.sub,
         classSessionId: session.id,
@@ -69,7 +68,6 @@ export class AttendancesService {
     }
 
     await this.activityLogs.record({
-      tenantId: student.tenantId,
       moduleId: student.moduleId,
       actorType: 'student',
       actorId: student.sub,
@@ -90,9 +88,9 @@ export class AttendancesService {
 
   // RF-05: todas las fechas del módulo con su estado y un resumen
   async myHistory(student: StudentPrincipal) {
-    const [module, today, sessions, attendances] = await Promise.all([
+    const today = this.institution.today();
+    const [module, sessions, attendances] = await Promise.all([
       this.academicModuleModel.findByPk(student.moduleId),
-      this.tenants.todayFor(student.tenantId),
       this.classSessionModel.findAll({ where: { moduleId: student.moduleId }, order: [['classDate', 'ASC']] }),
       this.attendanceModel.findAll({ where: { studentId: student.sub, moduleId: student.moduleId } }),
     ]);

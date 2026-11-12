@@ -2,7 +2,6 @@ import { BelongsTo, Column, DataType, ForeignKey, Model, Table } from 'sequelize
 import { AcademicModule } from '../../academic-modules/repo/academic-module.model';
 import { ClassSession } from '../../class-sessions/repo/class-session.model';
 import { Student } from '../../students/repo/student.model';
-import { Tenant } from '../../tenants/repo/tenant.model';
 import { User } from '../../users/repo/user.model';
 
 export type AttendanceStatus = 'present' | 'absent';
@@ -13,10 +12,6 @@ export type AttendanceSource = 'student' | 'admin';
 export class Attendance extends Model {
   @Column({ type: DataType.UUID, primaryKey: true, defaultValue: DataType.UUIDV4 })
   id: string;
-
-  @ForeignKey(() => Tenant)
-  @Column({ type: DataType.UUID, allowNull: false })
-  tenantId: string;
 
   @ForeignKey(() => AcademicModule)
   @Column({ type: DataType.UUID, allowNull: false })

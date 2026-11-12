@@ -8,7 +8,7 @@ import { AdminPrincipal } from '../../auth/types/auth-principal';
 import { ClassSession } from '../../class-sessions/repo/class-session.model';
 import { toSessionView } from '../../class-sessions/repo/class-session.view';
 import { Student } from '../../students/repo/student.model';
-import { TenantsService } from '../../tenants/repo/tenant.service';
+import { InstitutionService } from '../../../institution/institution.service';
 import { toFileSlug } from '../../../common/excel/excel-writer';
 import { AttendanceOverviewQuery } from '../dto/attendance-overview.query';
 import { UpdateAttendanceDto } from '../dto/update-attendance.dto';
@@ -27,15 +27,15 @@ export class AttendanceAdminService {
     @InjectModel(Student) private readonly studentModel: typeof Student,
     @InjectConnection() private readonly sequelize: Sequelize,
     private readonly academicModules: AcademicModulesService,
-    private readonly tenants: TenantsService,
+    private readonly institution: InstitutionService,
     private readonly activityLogs: ActivityLogsService,
   ) {}
 
   // Carga común de la vista general: la usan la consulta (RF-08) y el export (RF-17)
   private async loadOverview(admin: AdminPrincipal, query: AttendanceOverviewQuery) {
-    const module = await this.academicModules.requireActive(admin.tenantId);
-    const [today, sessions, students] = await Promise.all([
-      this.tenants.todayFor(admin.tenantId),
+    const module = await this.academicModules.requireActive();
+    const today = this.institution.today();
+    const [sessions, students] = await Promise.all([
       this.classSessionModel.findAll({
         where: { moduleId: module.id, ...(query.date ? { classDate: query.date } : {}) },
         order: [['classDate', 'ASC']],
@@ -128,8 +128,8 @@ export class AttendanceAdminService {
 
   // RF-07: cambia Presente/Falta en cualquier fecha del módulo activo, incluso pasada. Queda auditado (RN-07)
   async update(admin: AdminPrincipal, dto: UpdateAttendanceDto, ip: string) {
-    const module = await this.academicModules.requireActive(admin.tenantId);
-    const today = await this.tenants.todayFor(admin.tenantId);
+    const module = await this.academicModules.requireActive();
+    const today = this.institution.today();
 
     try {
       return await this.sequelize.transaction(async (transaction) => {
@@ -166,7 +166,6 @@ export class AttendanceAdminService {
           ? await existing.update({ status: dto.status, source: 'admin', updatedBy: admin.sub }, { transaction })
           : await this.attendanceModel.create(
               {
-                tenantId: admin.tenantId,
                 moduleId: module.id,
                 studentId: student.id,
                 classSessionId: session.id,
@@ -180,7 +179,6 @@ export class AttendanceAdminService {
 
         await this.activityLogs.record(
           {
-            tenantId: admin.tenantId,
             moduleId: module.id,
             actorType: 'admin',
             actorId: admin.sub,
