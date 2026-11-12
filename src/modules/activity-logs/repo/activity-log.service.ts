@@ -4,15 +4,13 @@ import { literal, Op, Transaction, WhereOptions } from 'sequelize';
 import { Sequelize } from 'sequelize-typescript';
 import { AcademicModule } from '../../academic-modules/repo/academic-module.model';
 import { Attendance } from '../../attendances/repo/attendance.model';
-import { AdminPrincipal } from '../../auth/types/auth-principal';
 import { Student } from '../../students/repo/student.model';
-import { TenantsService } from '../../tenants/repo/tenant.service';
+import { InstitutionService } from '../../../institution/institution.service';
 import { User } from '../../users/repo/user.model';
 import { ListActivityLogsQuery } from '../dto/list-activity-logs.query';
 import { ActivityAction, ActivityLog, ActorType } from './activity-log.model';
 
 export interface RecordActivityInput {
-  tenantId: string | null;
   moduleId?: string | null;
   actorType: ActorType;
   actorId?: string | null;
@@ -33,7 +31,7 @@ export class ActivityLogsService {
     @InjectModel(Student) private readonly studentModel: typeof Student,
     @InjectModel(User) private readonly userModel: typeof User,
     @InjectConnection() private readonly sequelize: Sequelize,
-    private readonly tenants: TenantsService,
+    private readonly institution: InstitutionService,
   ) {}
 
   // RF-09: registra una acción. Pasa la transacción si la acción forma parte de una
@@ -42,8 +40,8 @@ export class ActivityLogsService {
   }
 
   // RF-10: historial del módulo activo, del más reciente al más antiguo
-  async list(admin: AdminPrincipal, query: ListActivityLogsQuery) {
-    const module = await this.academicModuleModel.findOne({ where: { tenantId: admin.tenantId, status: 'active' } });
+  async list(query: ListActivityLogsQuery) {
+    const module = await this.academicModuleModel.findOne({ where: { status: 'active' } });
     if (!module) {
       throw new NotFoundException('No hay un módulo activo');
     }
@@ -73,15 +71,15 @@ export class ActivityLogsService {
     }
 
     if (query.date) {
-      // El día se interpreta en la zona horaria del tenant
-      const timezone = this.sequelize.escape(await this.tenants.timezoneOf(admin.tenantId));
+      // El día se interpreta en la zona horaria de la institución
+      const timezone = this.sequelize.escape(this.institution.timezone);
       conditions.push(
         literal(`("ActivityLog"."created_at" AT TIME ZONE ${timezone})::date = ${this.sequelize.escape(query.date)}`),
       );
     }
 
     const { rows, count } = await this.activityLogModel.findAndCountAll({
-      where: { tenantId: admin.tenantId, [Op.and]: conditions },
+      where: { [Op.and]: conditions },
       order: [['createdAt', 'DESC']],
       limit: query.limit,
       offset: query.offset,

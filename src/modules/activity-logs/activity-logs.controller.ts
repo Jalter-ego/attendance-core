@@ -1,6 +1,5 @@
 import { Controller, Get, Query } from '@nestjs/common';
-import { AllowOnly, CurrentUser } from '../auth/auth.decorators';
-import type { AdminPrincipal } from '../auth/types/auth-principal';
+import { AllowOnly } from '../auth/auth.decorators';
 import { ListActivityLogsQuery } from './dto/list-activity-logs.query';
 import { ActivityLogsService } from './repo/activity-log.service';
 
@@ -11,7 +10,7 @@ export class ActivityLogsController {
   constructor(private readonly activityLogsService: ActivityLogsService) {}
 
   @Get()
-  list(@CurrentUser() admin: AdminPrincipal, @Query() query: ListActivityLogsQuery) {
-    return this.activityLogsService.list(admin, query);
+  list(@Query() query: ListActivityLogsQuery) {
+    return this.activityLogsService.list(query);
   }
 }

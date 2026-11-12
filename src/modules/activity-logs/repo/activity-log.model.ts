@@ -1,6 +1,5 @@
 import { Column, DataType, ForeignKey, Model, Table } from 'sequelize-typescript';
 import { AcademicModule } from '../../academic-modules/repo/academic-module.model';
-import { Tenant } from '../../tenants/repo/tenant.model';
 
 export type ActorType = 'admin' | 'student' | 'system';
 
@@ -18,11 +17,6 @@ export type ActivityAction =
 export class ActivityLog extends Model {
   @Column({ type: DataType.UUID, primaryKey: true, defaultValue: DataType.UUIDV4 })
   id: string;
-
-  // NULL en acciones del super-admin de la plataforma
-  @ForeignKey(() => Tenant)
-  @Column({ type: DataType.UUID, allowNull: true })
-  tenantId: string | null;
 
   // NULL en acciones sin módulo, como un login sin módulo activo
   @ForeignKey(() => AcademicModule)
