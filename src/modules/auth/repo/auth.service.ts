@@ -1,3 +1,4 @@
+import { InstitutionService } from '../../../institution/institution.service';
 import { Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectModel } from '@nestjs/sequelize';
@@ -6,7 +7,6 @@ import { col, fn, Op, where } from 'sequelize';
 import { AcademicModule } from '../../academic-modules/repo/academic-module.model';
 import { ActivityLogsService } from '../../activity-logs/repo/activity-log.service';
 import { Student } from '../../students/repo/student.model';
-import { Tenant } from '../../tenants/repo/tenant.model';
 import { User } from '../../users/repo/user.model';
 import { AdminLoginDto } from '../dto/admin-login.dto';
 import { StudentLoginDto } from '../dto/student-login.dto';
@@ -21,7 +21,7 @@ const lowerEquals = (column: string, value: string) =>
 @Injectable()
 export class AuthService {
   constructor(
-    @InjectModel(Tenant) private readonly tenantModel: typeof Tenant,
+    private readonly institution: InstitutionService,
     @InjectModel(User) private readonly userModel: typeof User,
     @InjectModel(AcademicModule) private readonly academicModuleModel: typeof AcademicModule,
     @InjectModel(Student) private readonly studentModel: typeof Student,
@@ -31,21 +31,9 @@ export class AuthService {
 
   // RF-02
   async loginAdmin(dto: AdminLoginDto, ip: string) {
-    let tenant: Tenant | null = null;
-    let user: User | null = null;
-
-    if (dto.tenant) {
-      tenant = await this.findActiveTenant(dto.tenant);
-      user = tenant
-        ? await this.userModel.findOne({
-            where: { tenantId: tenant.id, [Op.and]: [lowerEquals('email', dto.email)] },
-          })
-        : null;
-    } else {
-      user = await this.userModel.findOne({
-        where: { tenantId: null, role: 'superadmin', [Op.and]: [lowerEquals('email', dto.email)] },
-      });
-    }
+    const user = await this.userModel.findOne({
+      where: { [Op.and]: [lowerEquals('email', dto.email)] },
+    });
 
     if (!user || !user.isActive || !(await compare(dto.password, user.passwordHash))) {
       throw new UnauthorizedException(INVALID_ADMIN_CREDENTIALS);
@@ -53,7 +41,6 @@ export class AuthService {
 
     await user.update({ lastLoginAt: new Date() });
     await this.activityLogs.record({
-      tenantId: user.tenantId,
       actorType: 'admin',
       actorId: user.id,
       action: 'LOGIN',
@@ -65,26 +52,20 @@ export class AuthService {
     const principal: AdminPrincipal = {
       type: 'admin',
       sub: user.id,
-      tenantId: user.tenantId ?? '',
       role: user.role,
     };
 
     return {
       accessToken: await this.jwtService.signAsync(principal),
       user: { id: user.id, name: user.name, email: user.email, role: user.role },
-      tenant: tenant ? this.tenantSummary(tenant) : null,
+      institution: this.institution.summary(),
     };
   }
 
   // RF-01: ingreso con correo o número de registro, solo del módulo activo
   async loginStudent(dto: StudentLoginDto, ip: string) {
-    const tenant = await this.findActiveTenant(dto.tenant);
-    if (!tenant) {
-      throw new UnauthorizedException(STUDENT_NOT_FOUND);
-    }
-
     const activeModule = await this.academicModuleModel.findOne({
-      where: { tenantId: tenant.id, status: 'active' },
+      where: { status: 'active' },
     });
     if (!activeModule) {
       throw new UnauthorizedException('No hay un módulo activo en este momento');
@@ -101,7 +82,6 @@ export class AuthService {
     }
 
     await this.activityLogs.record({
-      tenantId: tenant.id,
       moduleId: activeModule.id,
       actorType: 'student',
       actorId: student.id,
@@ -114,7 +94,6 @@ export class AuthService {
     const principal: StudentPrincipal = {
       type: 'student',
       sub: student.id,
-      tenantId: tenant.id,
       moduleId: activeModule.id,
     };
 
@@ -122,48 +101,39 @@ export class AuthService {
       accessToken: await this.jwtService.signAsync(principal),
       student: this.studentSummary(student),
       module: { id: activeModule.id, name: activeModule.name },
-      tenant: this.tenantSummary(tenant),
+      institution: this.institution.summary(),
     };
   }
 
   async me(principal: AuthPrincipal) {
     if (principal.type === 'admin') {
       const user = await this.userModel.findOne({
-        where: { id: principal.sub, tenantId: principal.tenantId, isActive: true },
+        where: { id: principal.sub, isActive: true },
       });
       if (!user) {
         throw new NotFoundException('El usuario ya no existe o fue desactivado');
       }
-      return { type: 'admin', user: { id: user.id, name: user.name, email: user.email, role: user.role } };
+      return { type: 'admin', institution: this.institution.summary(), user: { id: user.id, name: user.name, email: user.email, role: user.role } };
     }
 
     const student = await this.studentModel.findOne({
-      where: { id: principal.sub, tenantId: principal.tenantId, moduleId: principal.moduleId },
+      where: { id: principal.sub, moduleId: principal.moduleId },
     });
     if (!student) {
       throw new NotFoundException('El estudiante ya no pertenece al módulo activo');
     }
-    return { type: 'student', student: this.studentSummary(student) };
+    return { type: 'student', institution: this.institution.summary(), student: this.studentSummary(student) };
   }
 
   // El JWT no se puede invalidar en el servidor: el cliente lo descarta. Aquí solo se registra la salida
   async logout(principal: AuthPrincipal, ip: string): Promise<void> {
     await this.activityLogs.record({
-      tenantId: principal.tenantId,
       moduleId: principal.type === 'student' ? principal.moduleId : null,
       actorType: principal.type,
       actorId: principal.sub,
       action: 'LOGOUT',
       ip,
     });
-  }
-
-  private findActiveTenant(slug: string): Promise<Tenant | null> {
-    return this.tenantModel.findOne({ where: { slug: slug.toLowerCase(), status: 'active' } });
-  }
-
-  private tenantSummary(tenant: Tenant) {
-    return { id: tenant.id, name: tenant.name, slug: tenant.slug };
   }
 
   private studentSummary(student: Student) {

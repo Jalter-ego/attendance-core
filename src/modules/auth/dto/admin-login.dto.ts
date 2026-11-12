@@ -1,15 +1,9 @@
 import { Transform } from 'class-transformer';
-import { IsEmail, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsString } from 'class-validator';
 
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
 
 export class AdminLoginDto {
-  // Slug de la institución (opcional solo para el superadmin de la plataforma)
-  @Transform(trim)
-  @IsOptional()
-  @IsString()
-  tenant?: string;
-
   @Transform(trim)
   @IsEmail({}, { message: 'Ingresa un correo válido' })
   email: string;

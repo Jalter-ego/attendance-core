@@ -12,7 +12,7 @@ export const Public = () => SetMetadata(IS_PUBLIC_KEY, true);
 // Restringe la ruta a admins o estudiantes: @AllowOnly('admin')
 export const AllowOnly = (...types: PrincipalType[]) => SetMetadata(ALLOWED_TYPES_KEY, types);
 
-// Restringe además por rol del admin: @AllowRoles('superadmin').
+// Restringe además por rol del admin: @AllowRoles('owner').
 // Para rutas que administran la plataforma, no una institución
 export const AllowRoles = (...roles: UserRole[]) => SetMetadata(ALLOWED_ROLES_KEY, roles);
 

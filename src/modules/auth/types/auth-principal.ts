@@ -4,14 +4,12 @@ import { UserRole } from '../../users/repo/user.model';
 export interface AdminPrincipal {
   type: 'admin';
   sub: string;
-  tenantId: string;
   role: UserRole;
 }
 
 export interface StudentPrincipal {
   type: 'student';
   sub: string;
-  tenantId: string;
   moduleId: string;
 }
 

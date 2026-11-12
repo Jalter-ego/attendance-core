@@ -5,7 +5,6 @@ import { JwtModule } from '@nestjs/jwt';
 import { AcademicModulesModule } from '../academic-modules/academic-modules.module';
 import { ActivityLogsModule } from '../activity-logs/activity-logs.module';
 import { StudentsModule } from '../students/students.module';
-import { TenantsModule } from '../tenants/tenants.module';
 import { UsersModule } from '../users/users.module';
 import { AuthController } from './auth.controller';
 import { AuthGuard } from './guards/auth.guard';
@@ -13,7 +12,6 @@ import { AuthService } from './repo/auth.service';
 
 @Module({
   imports: [
-    TenantsModule,
     UsersModule,
     AcademicModulesModule,
     StudentsModule,
