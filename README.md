@@ -6,6 +6,8 @@ Cada instalación atiende a **una sola institución** y tiene su propia base Pos
 
 Hay un solo **módulo académico activo** a la vez; al activar uno nuevo, el anterior se archiva sin borrar sus datos.
 
+Cada instalación puede tener un **plan** con límites de estudiantes, docentes y cursos, expone **métricas Prometheus** para el monitoreo y, fuera de producción, endpoints de demostración. Ver [Plan, métricas y demo](#plan-métricas-y-demo).
+
 Las migraciones crean las tablas para una sola institución en el esquema predeterminado de PostgreSQL (`public`), sin crear esquemas adicionales ni comprobar el esquema al arrancar. Puedes reutilizar la base actual después de borrar las tablas anteriores. Al reiniciarla, elimina también `SequelizeMeta`, que guarda el historial de migraciones, y vuelve a ejecutar `pnpm db:migrate`.
 
 ---
@@ -17,10 +19,11 @@ Las migraciones crean las tablas para una sola institución en el esquema predet
 3. [Cómo levantar el proyecto](#cómo-levantar-el-proyecto)
 4. [Cómo funciona](#cómo-funciona)
 5. [Endpoints](#endpoints)
-6. [Cómo probar](#cómo-probar)
-7. [Formato de los archivos Excel](#formato-de-los-archivos-excel)
-8. [Base de datos, migraciones y seeders](#base-de-datos-migraciones-y-seeders)
-9. [Estructura del proyecto](#estructura-del-proyecto)
+6. [Plan, métricas y demo](#plan-métricas-y-demo)
+7. [Cómo probar](#cómo-probar)
+8. [Formato de los archivos Excel](#formato-de-los-archivos-excel)
+9. [Base de datos, migraciones y seeders](#base-de-datos-migraciones-y-seeders)
+10. [Estructura del proyecto](#estructura-del-proyecto)
 
 ---
 
@@ -54,6 +57,9 @@ Las migraciones crean las tablas para una sola institución en el esquema predet
    | `DB_SSL` | `false` para PostgreSQL local; según la conexión para producción. |
    | `JWT_SECRET` | Secreto largo y aleatorio **distinto en cada instalación**. Evita que un token de un cliente funcione en otro. |
    | `JWT_EXPIRES_IN` | Duración del token, por defecto `8h`. |
+   | `TENANT_PLAN` | *Opcional.* Plan de la instalación (`basic`, `standard`, `advanced`); solo se usa para mostrar su nombre. |
+   | `PLAN_MAX_STUDENTS`, `PLAN_MAX_TEACHERS`, `PLAN_MAX_COURSES` | *Opcionales.* Límites del plan (enteros positivos). Sin ellas no hay límite. Ver [Límites del plan](#límites-del-plan). |
+   | `TENANT_ENV` | *Opcional.* `test` o `prod`. Con `test` existen los endpoints de demo; con `prod` no. Sin definirla, existen solo si `NODE_ENV` no es `production`. |
 
 4. **Crear las tablas:**
 
@@ -113,7 +119,7 @@ Authorization: Bearer <accessToken>
 
 El token indica quién es el usuario y, en el caso del estudiante, su módulo. El aislamiento entre clientes lo proporciona su instalación y base independiente. Los administradores tienen roles `owner` o `admin`; solo el `owner` administra cuentas mediante `/users`.
 
-Las rutas de negocio exigen token. Son públicos los logins, la raíz, `GET /institution` (nombre y zona horaria) y `GET /health` (conexión a la base; devuelve 503 si falla). Cada ruta además está restringida a un rol: si un estudiante llama a una ruta de admin, o al revés, recibe `403`.
+Las rutas de negocio exigen token. Son públicos los logins, la raíz, `GET /institution` (nombre y zona horaria), `GET /health` (conexión a la base; devuelve 503 si falla) y `GET /metrics` (métricas Prometheus; ver [Plan, métricas y demo](#plan-métricas-y-demo)). Cada ruta además está restringida a un rol: si un estudiante llama a una ruta de admin, o al revés, recibe `403`.
 
 ### Ciclo de vida de un módulo académico
 
@@ -158,6 +164,22 @@ Se registran en `activity_logs` el usuario, la acción, la fecha y hora, la IP, 
 | `ATTENDANCE_MARKED`                         | El estudiante marcó su asistencia       |
 | `ATTENDANCE_UPDATED`                        | El admin corrigió una asistencia        |
 
+### Límites del plan
+
+La plataforma entrega a cada instalación el plan contratado mediante variables de entorno. Sin ellas la app no limita nada.
+
+| Variable | Qué limita | Cómo se cuenta |
+| --- | --- | --- |
+| `PLAN_MAX_STUDENTS` | Estudiantes | Los de los módulos no archivados. Al importar se suman los de los demás módulos y las filas del archivo; el borrador se reemplaza, no se suma |
+| `PLAN_MAX_TEACHERS` | Docentes | Usuarios activos, **el owner incluido**. Cuenta al crear un usuario activo y al reactivar uno inactivo |
+| `PLAN_MAX_COURSES` | Cursos | Módulos en borrador o activos |
+
+- Al superar el límite la acción responde `403` y no guarda nada: *«Tu plan Básico permite hasta 100 estudiantes (esta acción llegaría a 120). Para ampliar el límite, solicita un cambio de plan.»*
+- Llegar justo al límite está permitido.
+- Un valor que no sea un entero positivo (`0`, `-5`, `abc`) hace que la app **falle al arrancar**, para detectar un plan mal escrito en el despliegue.
+- `TENANT_PLAN` solo sirve para mostrar el nombre del plan en los mensajes y en `GET /plan/usage`.
+- El uso actual de cada límite se consulta en [`GET /plan/usage`](#plan-admin).
+
 ---
 
 ## Endpoints
@@ -186,7 +208,7 @@ Todas las rutas van bajo `http://localhost:5000/core/api/v1`.
 | ------- | ------------------------------------------------------------------------------------- |
 | `400` | Datos mal enviados (validación)                                                      |
 | `401` | Sin sesión, sesión vencida o credenciales incorrectas                               |
-| `403` | El rol no tiene permiso para esa ruta                                                 |
+| `403` | El rol no tiene permiso para esa ruta, o la acción supera un límite del plan         |
 | `404` | El recurso no existe o no pertenece al módulo activo                                 |
 | `409` | Conflicto, por ejemplo una asistencia ya marcada o un módulo ya activo               |
 | `422` | La operación no se puede hacer, por ejemplo un Excel con errores o un día sin clase |
@@ -412,6 +434,57 @@ Respuesta `200`:
 
 ---
 
+## Plan, métricas y demo
+
+### Plan (admin)
+
+| Método | Ruta | Acceso | Descripción |
+| --- | --- | --- | --- |
+| GET | `/plan/usage` | Admin (`owner` y `admin`) | Plan de la instalación y cuánto se usa de cada límite |
+
+Respuesta `200` con el plan Básico:
+
+```json
+{
+  "plan": { "code": "basic", "name": "Básico" },
+  "usage": {
+    "students": { "used": 85, "limit": 100, "remaining": 15 },
+    "teachers": { "used": 3,  "limit": 10,  "remaining": 7 },
+    "courses":  { "used": 2,  "limit": 20,  "remaining": 18 }
+  }
+}
+```
+
+Sin plan o sin límites, `plan` y `limit`/`remaining` van en `null`. `remaining` nunca es negativo. Sin token responde `401`; un estudiante recibe `403`.
+
+### Métricas Prometheus
+
+`GET /metrics` es **público** (Prometheus no se autentica) y responde en formato de texto de Prometheus.
+
+| Métrica | Uso |
+| --- | --- |
+| `http_requests_total{method,route,status}` | Peticiones por segundo y errores (5xx con `status=~"5.."`) |
+| `http_request_duration_seconds{method,route,status}` | Latencia por ruta (histograma) |
+| `nodejs_eventloop_lag_seconds` y variantes | Event loop |
+| `nodejs_heap_size_used_bytes` | Heap |
+| `process_cpu_seconds_total`, `process_resident_memory_bytes` | CPU y memoria del proceso |
+
+- `route` es el patrón de la ruta (`/core/api/v1/users/:id`), nunca la URL real, y las rutas que no existen se agrupan en `unmatched`. Así no se crea una serie por cada URL inventada.
+- Cuenta todas las respuestas, también los `401`, `403` y `404`. No se cuenta a sí mismo.
+- **Acceso:** Prometheus debe consultarlo directo al puerto del backend. Si la petición trae `X-Forwarded-For`, que el nginx del frontend añade siempre, responde `404`: así las métricas no se publican en Internet aunque el proxy reenvíe todo `/core/`.
+- Las etiquetas `tenant`, `env` y `role` no las pone la app: salen de las tags de EC2 con `ec2_sd`.
+
+### Endpoints de demo
+
+Sirven para provocar a propósito errores 500 y latencia alta, y así demostrar el panel y la alerta de Grafana. Son públicos y **solo existen fuera de producción**: con `TENANT_ENV=test`, o sin `TENANT_ENV` y con `NODE_ENV` distinto de `production`. En cualquier otro caso responden `404`.
+
+| Método | Ruta | Descripción |
+| --- | --- | --- |
+| GET | `/demo/error` | Responde `500` |
+| GET | `/demo/slow?ms=2000` | Espera `ms` milisegundos (por defecto 2000). Un valor que no sea un entero entre 0 y 10000 responde `400` |
+
+---
+
 ## Cómo probar
 
 ### Datos de prueba
@@ -437,6 +510,14 @@ pnpm build
 
 Las pruebas de instalación levantan la aplicación Nest con modelos simulados y comprueban login, permisos, validación de sesiones, rechazo de tokens de otra instalación y generación del SQL de las migraciones. **No sustituyen una prueba de migraciones con PostgreSQL real.** No leen ni modifican Supabase.
 
+### Pruebas unitarias
+
+```bash
+pnpm test
+```
+
+Usan vitest (`vitest.config.mts`) y modelos simulados, sin base de datos: límites del plan, `GET /plan/usage`, métricas (con una app Nest mínima) y endpoints de demo. El e2e de `test/` necesita PostgreSQL y no se ejecuta aquí. Para probar las consultas contra una base real, usa la colección de Postman de [plan, métricas y demo](#con-postman-plan-métricas-y-demo).
+
 ### Con Postman
 
 1. En Postman, pulsa **Import** y elige `docs/postman/attendance-core.postman_collection.json`.
@@ -450,6 +531,42 @@ Las pruebas de instalación levantan la aplicación Nest con modelos simulados y
 | **4. Administración**         | *Vista general* guarda un `studentId` y un `classSessionId` para probar *Modificar asistencia* |
 
 **Importar Excel en Postman.** En **Body** elige **form-data**, pon la clave `file`, cambia su tipo de *Text* a **File** y selecciona el archivo. La colección apunta a la carpeta `docs/excel-ejemplos/` con una ruta absoluta; si en tu equipo está en otra ubicación, vuelve a seleccionar el archivo.
+
+### Con Postman: plan, métricas y demo
+
+La colección `docs/postman/attendance-core-plan-limits.postman_collection.json` ejecuta paso a paso las pruebas de [Plan, métricas y demo](#plan-métricas-y-demo). Cada request trae sus aserciones: en el Runner de Postman cada carpeta debe quedar en verde.
+
+1. **Base vacía** migrada (`pnpm db:migrate`) con el owner creado (`pnpm instance:bootstrap`). Solo debe existir el owner. Usa una base descartable, nunca la de un cliente.
+2. **Arranca la app** con el plan de la colección. Las variables del proceso tienen prioridad sobre el `.env`:
+
+   ```bash
+   # bash
+   TENANT_ENV=test TENANT_PLAN=basic PLAN_MAX_STUDENTS=5 PLAN_MAX_TEACHERS=2 PLAN_MAX_COURSES=2 pnpm start:prod
+   ```
+
+   ```powershell
+   # PowerShell
+   $env:TENANT_ENV='test'; $env:TENANT_PLAN='basic'
+   $env:PLAN_MAX_STUDENTS='5'; $env:PLAN_MAX_TEACHERS='2'; $env:PLAN_MAX_COURSES='2'
+   pnpm start:prod
+   ```
+3. En Postman importa la colección y completa en **Variables** `adminEmail` y `adminPassword` (el owner del bootstrap). Si la app no corre en `localhost:5000`, cambia `baseUrl`. `planCode`, `limitStudents`, `limitTeachers` y `limitCourses` deben coincidir con las variables de la app.
+4. Ejecuta las carpetas **0 a 7 en orden** (*Run collection*, sin la carpeta 8).
+5. Reinicia la app con `TENANT_ENV=prod` (y sin `PLAN_MAX_*` si quieres ver también «sin límites», poniendo `prodWithoutLimits` en `true`) y ejecuta la carpeta **8**.
+
+| Carpeta | Qué comprueba |
+| --- | --- |
+| **0. Comprobación** | La app responde y está conectada a la base |
+| **1. Autenticación** | Login del owner (guarda `adminToken`) y `401` en `/plan/usage` sin token |
+| **2. Estado inicial del plan** | Plan y límites leídos de las variables; base vacía: 0 estudiantes, 1 docente (el owner), 0 cursos |
+| **3. Límite de docentes** | Un docente cabe; el siguiente da `403` con el mensaje del plan; un inactivo no ocupa cupo; reactivarlo sin cupo da `403` |
+| **4. Límite de cursos** | Dos cursos caben; el tercero da `403` |
+| **5. Límite de estudiantes** | El Excel de ejemplo (5 estudiantes) entra justo; el mismo archivo en otro curso da `403` («llegaría a 10»); reimportar en el mismo curso reemplaza sin sumar; `/plan/usage` queda todo en 0 restante |
+| **6. Métricas Prometheus** | `/metrics` sin JWT con las métricas esperadas, los `401` y `403` contados, rutas como patrón, y `404` si llega `X-Forwarded-For` |
+| **7. Endpoints de demo** | `500` a propósito, espera de 300 ms, `400` con `ms` inválido, y el `500` y la latencia visibles en `/metrics` |
+| **8. Modo producción** | Con `TENANT_ENV=prod` los endpoints de demo dan `404` y `/metrics` sigue disponible |
+
+Cada corrida necesita una **base limpia**, porque los límites quedan llenos: para repetirla vuelve a crear la base. Las tres importaciones de la carpeta 5 apuntan al Excel de ejemplo con una ruta absoluta; si tu repositorio está en otra ubicación, vuelve a seleccionar el archivo.
 
 ### Con curl
 
@@ -551,6 +668,9 @@ src/
 │   └── sequelize-cli/              # Migraciones, seeders y config del CLI
 ├── institution/                    # Nombre y zona horaria por instalación
 ├── health/                         # Comprobación de conexión a la base
+├── plan/                           # Límites del plan y GET /plan/usage
+├── metrics/                        # Métricas Prometheus (GET /metrics)
+├── demo/                           # Endpoints de demo (solo fuera de producción)
 ├── modules/                        # Módulos del negocio
 │   ├── auth/                       # Login, JWT, guard global y decoradores
 │   ├── users/                      # Administradores
@@ -563,7 +683,7 @@ src/
 └── main.ts
 docs/
 ├── excel-ejemplos/                 # Archivos Excel de ejemplo
-└── postman/                        # Colección de Postman
+└── postman/                        # Colecciones de Postman: la API y plan/métricas/demo
 ```
 
 Cada módulo de negocio sigue esta estructura:
@@ -589,9 +709,9 @@ Cada módulo de negocio sigue esta estructura:
 ## Contrato para el futuro despliegue
 
 1. Crear PostgreSQL y una base vacía por cliente (fuera de este repositorio).
-2. Proporcionar las variables del backend, incluida la identidad de la institución y un `JWT_SECRET` propio.
+2. Proporcionar las variables del backend, incluida la identidad de la institución, un `JWT_SECRET` propio y las del plan (`TENANT_ENV`, `TENANT_PLAN` y `PLAN_MAX_*`; ver [Límites del plan](#límites-del-plan)).
 3. Ejecutar `pnpm db:migrate` y `pnpm instance:bootstrap` una vez; arrancar con `pnpm start:prod` después de compilar.
 4. Servir el frontend y enviar `/core/api/v1` al backend mediante el proxy del servidor web. También se admite una API externa configurada en el frontend.
-5. Comprobar `GET /core/api/v1/health`.
+5. Comprobar `GET /core/api/v1/health`. El monitoreo consulta `GET /core/api/v1/metrics` directo al puerto del backend; por el proxy del frontend queda oculto (`404`).
 
 El nombre del dominio identifica el despliegue desde la plataforma; Attendance no lo interpreta. No se han creado aquí instancias, imágenes ni la plataforma de administración. Bootstrap y Sequelize CLI necesitan los archivos `scripts/` y `src/database/sequelize-cli/` junto con sus dependencias en la fase de inicialización; `dist/` por sí solo no los incluye.
