@@ -3,6 +3,7 @@ import { InjectConnection, InjectModel } from '@nestjs/sequelize';
 import { Op, WhereOptions } from 'sequelize';
 import { Sequelize } from 'sequelize-typescript';
 import { escapeLike } from '../../../common/dto/query-transforms';
+import { PlanLimitsService } from '../../../plan/plan-limits.service';
 import { readExcelSheet } from '../../../common/excel/excel-reader';
 import { rethrowExcelReadError, throwImportErrors } from '../../../common/excel/excel-upload';
 import { AcademicModulesService } from '../../academic-modules/repo/academic-module.service';
@@ -18,6 +19,7 @@ export class StudentsService {
     @InjectConnection() private readonly sequelize: Sequelize,
     private readonly academicModules: AcademicModulesService,
     private readonly activityLogs: ActivityLogsService,
+    private readonly planLimits: PlanLimitsService,
   ) {}
 
   // RF-06: estudiantes del módulo activo; busca por nombre (en cualquier parte) o por registro (desde el inicio)
@@ -60,6 +62,13 @@ export class StudentsService {
 
     await this.sequelize.transaction(async (transaction) => {
       await this.academicModules.findDraftOrFail(moduleId, transaction);
+
+      // RF-05: el borrador se reemplaza, así que el total es lo de los demás módulos + el archivo
+      if (this.planLimits.limitOf('students') !== null) {
+        const others = await this.academicModules.countStudentsInOtherModules(moduleId, transaction);
+        this.planLimits.assertWithinLimit('students', others + students.length);
+      }
+
       await this.studentModel.destroy({ where: { moduleId }, transaction });
       await this.studentModel.bulkCreate(
         students.map((student) => ({ ...student, moduleId })),
