@@ -7,6 +7,7 @@ import { ConfigModule } from './config/config.module';
 import { DatabaseModule } from './database/database.module';
 import { PlanModule } from './plan/plan.module';
 import { MetricsModule } from './metrics/metrics.module';
+import { DemoModule } from './demo/demo.module';
 import { AcademicModulesModule } from './modules/academic-modules/academic-modules.module';
 import { ActivityLogsModule } from './modules/activity-logs/activity-logs.module';
 import { AttendancesModule } from './modules/attendances/attendances.module';
@@ -21,6 +22,7 @@ import { UsersModule } from './modules/users/users.module';
     InstitutionModule,
     PlanModule,
     MetricsModule,
+    DemoModule,
     DatabaseModule,
     AuthModule,
     UsersModule,
