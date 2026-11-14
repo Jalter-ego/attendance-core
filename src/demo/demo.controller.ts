@@ -1,11 +1,9 @@
 import {
   BadRequestException,
   Controller,
-  DefaultValuePipe,
   Get,
   InternalServerErrorException,
   NotFoundException,
-  ParseIntPipe,
   Query,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -39,10 +37,13 @@ export class DemoController {
 
   @Public()
   @Get('slow')
-  async slow(@Query('ms', new DefaultValuePipe(DEFAULT_SLOW_MS), ParseIntPipe) ms: number) {
+  // Se lee el valor crudo y se valida a mano: con el ValidationPipe global (transform: true) un
+  // "abc" llegaría a un pipe de Nest ya convertido en NaN y se confundiría con "no enviado".
+  async slow(@Query('ms') raw: unknown) {
     this.assertEnabled();
-    if (ms < 0 || ms > MAX_SLOW_MS) {
-      throw new BadRequestException(`ms debe estar entre 0 y ${MAX_SLOW_MS}`);
+    const ms = raw === undefined ? DEFAULT_SLOW_MS : typeof raw === 'string' && /^\d+$/.test(raw) ? Number(raw) : NaN;
+    if (!Number.isInteger(ms) || ms > MAX_SLOW_MS) {
+      throw new BadRequestException(`ms debe ser un entero entre 0 y ${MAX_SLOW_MS}`);
     }
     await new Promise((resolve) => setTimeout(resolve, ms));
     return { waitedMs: ms };

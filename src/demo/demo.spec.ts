@@ -1,4 +1,4 @@
-import { INestApplication } from '@nestjs/common';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
@@ -31,6 +31,8 @@ describe('Endpoints de demo', () => {
     }).compile();
     app = moduleRef.createNestApplication({ logger: false });
     app.setGlobalPrefix('core/api/v1');
+    // Igual que main.ts: con transform un valor no numérico llega convertido a NaN a los pipes
+    app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
     await app.init();
   }
 
@@ -50,7 +52,7 @@ describe('Endpoints de demo', () => {
       expect(Date.now() - started).toBeGreaterThanOrEqual(75);
     });
 
-    it.each(['abc', '-1', String(MAX_SLOW_MS + 1)])('/demo/slow rechaza ms=%s con 400', async (ms) => {
+    it.each(['abc', '-1', '1.5', '', String(MAX_SLOW_MS + 1)])('/demo/slow rechaza ms=%j con 400', async (ms) => {
       await http().get(`/core/api/v1/demo/slow?ms=${ms}`).expect(400);
     });
   });
