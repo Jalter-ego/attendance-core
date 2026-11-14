@@ -7,6 +7,7 @@ import {
 import { InjectModel } from '@nestjs/sequelize';
 import { hash } from 'bcryptjs';
 import { ForeignKeyConstraintError, UniqueConstraintError } from 'sequelize';
+import { PlanLimitsService } from '../../../plan/plan-limits.service';
 import { AdminPrincipal } from '../../auth/types/auth-principal';
 import { CreateUserDto } from '../dto/create-user.dto';
 import { UpdateUserDto } from '../dto/update-user.dto';
@@ -27,10 +28,20 @@ const USER_ATTRIBUTES = [
 export class UsersService {
   constructor(
     @InjectModel(User) private readonly userModel: typeof User,
+    private readonly planLimits: PlanLimitsService,
   ) {}
+
+  // RF-05: los usuarios activos de la institución cuentan contra el límite de docentes del plan
+  private async assertTeacherSlot() {
+    if (this.planLimits.limitOf('teachers') === null) return;
+    const active = await this.userModel.count({ where: { isActive: true } });
+    this.planLimits.assertWithinLimit('teachers', active + 1);
+  }
 
   async create(dto: CreateUserDto) {
     const role = dto.role ?? 'admin';
+
+    if (dto.isActive ?? true) await this.assertTeacherSlot();
 
     const passwordHash = await hash(dto.password, 10);
 
@@ -68,6 +79,9 @@ export class UsersService {
 
   async update(id: string, dto: UpdateUserDto, currentAdmin?: AdminPrincipal) {
     const user = await this.findUserEntity(id);
+
+    // Reactivar un usuario ocupa un cupo igual que crearlo
+    if (dto.isActive === true && !user.isActive) await this.assertTeacherSlot();
 
     const payload: Partial<User> = {};
     if (dto.name !== undefined) payload.name = dto.name;

@@ -2,13 +2,13 @@ import { ConflictException, Injectable, NotFoundException, UnprocessableEntityEx
 import { InjectConnection, InjectModel } from '@nestjs/sequelize';
 import { Op, Transaction, UniqueConstraintError } from 'sequelize';
 import { Sequelize } from 'sequelize-typescript';
+import { PlanLimitsService } from '../../../plan/plan-limits.service';
 import { ActivityLogsService } from '../../activity-logs/repo/activity-log.service';
 import { AdminPrincipal } from '../../auth/types/auth-principal';
 import { ClassSession } from '../../class-sessions/repo/class-session.model';
 import { Student } from '../../students/repo/student.model';
 import { AcademicModule } from './academic-module.model';
 
-// Los módulos archivados no se consultan en esta versión (RF-15)
 const VISIBLE_STATUSES = ['draft', 'active'];
 
 @Injectable()
@@ -19,9 +19,14 @@ export class AcademicModulesService {
     @InjectModel(ClassSession) private readonly classSessionModel: typeof ClassSession,
     @InjectConnection() private readonly sequelize: Sequelize,
     private readonly activityLogs: ActivityLogsService,
+    private readonly planLimits: PlanLimitsService,
   ) {}
 
   async create(name: string) {
+    if (this.planLimits.limitOf('courses') !== null) {
+      const current = await this.academicModuleModel.count({ where: { status: { [Op.in]: VISIBLE_STATUSES } } });
+      this.planLimits.assertWithinLimit('courses', current + 1);
+    }
     const module = await this.academicModuleModel.create({ name, status: 'draft' });
     return this.summary(module, 0, 0);
   }
@@ -39,7 +44,6 @@ export class AcademicModulesService {
     return this.summary(module, ...(await this.counts(module.id)));
   }
 
-  // La operación diaria (asistencias, estudiantes) trabaja siempre sobre el módulo activo
   async requireActive(): Promise<AcademicModule> {
     const module = await this.academicModuleModel.findOne({ where: { status: 'active' } });
     if (!module) {
@@ -48,7 +52,6 @@ export class AcademicModulesService {
     return module;
   }
 
-  // RF-16: vista previa con los estudiantes y las fechas cargadas
   async findOne(id: string) {
     const module = await this.findVisible(id);
     const [students, sessions] = await Promise.all([
@@ -72,8 +75,7 @@ export class AcademicModulesService {
     };
   }
 
-  // Para las importaciones: solo se cargan datos en un borrador.
-  // Dentro de una transacción bloquea la fila, para no cruzarse con una activación
+  
   async findDraftOrFail(id: string, transaction?: Transaction) {
     const module = await this.findVisible(id, transaction);
     if (module.status !== 'draft') {
@@ -82,7 +84,20 @@ export class AcademicModulesService {
     return module;
   }
 
-  // RF-13: archiva el módulo activo y activa este, en una sola transacción
+  countStudentsInOtherModules(moduleId: string, transaction?: Transaction): Promise<number> {
+    return this.studentModel.count({
+      include: [
+        {
+          model: AcademicModule,
+          attributes: [],
+          required: true,
+          where: { id: { [Op.ne]: moduleId }, status: { [Op.in]: VISIBLE_STATUSES } },
+        },
+      ],
+      transaction,
+    });
+  }
+
   async activate(admin: AdminPrincipal, id: string, ip: string) {
     try {
       return await this.sequelize.transaction(async (transaction) => {
@@ -138,7 +153,6 @@ export class AcademicModulesService {
         };
       });
     } catch (error) {
-      // Dos activaciones simultáneas: el índice único parcial (RN-01) rechaza la segunda
       if (error instanceof UniqueConstraintError) {
         throw new ConflictException('Otro módulo se activó al mismo tiempo. Vuelve a intentarlo');
       }
